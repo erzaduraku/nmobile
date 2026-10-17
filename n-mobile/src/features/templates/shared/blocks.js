@@ -138,7 +138,7 @@ export function items(ctx, d, t, s, w, k) {
   }
   // info / garancion
   const info = (d.info || '').trim()
-  if (info) { gap(22); const iz = (s.info?.size || 31) * k; out.push({ h: iz * 1.2, draw(x, y) { ctx.save(); iconLine(ctx, SHIELD, info, x, y + iz * 0.95, iz, s.info?.color || s.model.color, s.info?.icon || t.accent, A, w, 600); ctx.restore() } }) }
+  if (info && !s.skip?.info) { gap(22); const iz = (s.info?.size || 31) * k; out.push({ h: iz * 1.2, draw(x, y) { ctx.save(); iconLine(ctx, SHIELD, info, x, y + iz * 0.95, iz, s.info?.color || s.model.color, s.info?.icon || t.accent, A, w, 600); ctx.restore() } }) }
   // CTA
   const cta = (d.cta || '').trim()
   if (cta && !s.skip?.cta) {

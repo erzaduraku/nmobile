@@ -1,6 +1,7 @@
 import { drawDeco } from '../../../lib/canvas/draw.js'
 import { stack } from '../shared/blocks.js'
 import { proScene, proDisc, proPhoto, proTitle, proHeader, proFrame } from '../shared/pro.js'
+import { topTitle } from '../shared/kit.js'
 
 // =============== KATALOG (pro: teksti majtas, telefoni i madh djathtas) ===============
 export default function catalog(ctx, W, H, d, t) {
@@ -14,7 +15,9 @@ export default function catalog(ctx, W, H, d, t) {
   proDisc(ctx, pcx + 60, pcy + 40, st ? 400 : 290, t)
   proPhoto(ctx, d.img, pcx, pcy, st ? W * 0.78 : W * 0.46, st ? H * 0.38 : H * 0.7, -0.1)
   // teksti
-  const lw = st ? W - 2 * M : W * 0.48, ty = top + (st ? 140 : 150)
+  const lw = st ? W - 2 * M : W * 0.48
+  let ty = top + (st ? 140 : 150)
+  ty += topTitle(ctx, d, M, ty, { style: 'label', accent: t.accent, color: t.accent, z: st ? 26 : 22, maxW: lw })
   const th = proTitle(ctx, d, M, ty, lw, st ? 112 : 100, t, { maxLines: 4 })
   stack(ctx, d, t, { skip: { model: true }, model: { size: 10, color: '#111' }, spec: { mode: 'icons', size: 24, color: '#222', icon: t.accent, tile: '#FBE9E9', gap: 0 }, price: { size: 92, color: '#111', f: 'Montserrat' }, info: { color: '#555', size: 26 }, cta: { bg: t.accent, color: '#fff', size: 30 } },
     M, ty + th + 34, lw, (st ? H * 0.53 : H - 80) - (ty + th + 34), 'top')

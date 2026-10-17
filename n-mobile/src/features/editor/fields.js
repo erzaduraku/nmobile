@@ -4,7 +4,7 @@ export const EMPTY_X = {
   colors: [], condition: '', notes: [], photo2: '',
 }
 export const EMPTY_CONTACT = { phone: '', whatsapp: '', address: '', instagram: '' }
-export const CONDITIONS = ['I ri në pako', 'Si i ri', 'I përdorur']
+export const CONDITIONS = ['I ri në pako', 'I ri pa pako', 'I përdorur']
 export const NOTES = ['Me faturë', 'Dual SIM', 'eSIM']
 export const CTAS = ['Bli tani!', 'Porosit tani', 'Na kontakto']
 export const TITLES = ['SUPER OFERTA NË N MOBILE!', 'SOT NË STOK', 'ÇMIM SPECIAL']

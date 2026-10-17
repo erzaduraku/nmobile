@@ -1,5 +1,5 @@
 import { font, rr, drawLogo } from '../../../lib/canvas/draw.js'
-import { shade } from './blocks.js'
+import { shade, slash, slashes } from './blocks.js'
 
 /* Mjete për template-t e reja: zonat e sigurta, footer-i me kontakt,
    tekst i konturuar, forma dekorative. */
@@ -68,6 +68,28 @@ export function chip(ctx, text, x, y, z, bg, fg, align = 'left') {
   ctx.save(); ctx.font = font('Montserrat', 800, z); const w = ctx.measureText(text).width + z * 1.6, h = z * 1.9
   const bx = align === 'center' ? x - w / 2 : align === 'right' ? x - w : x
   rr(ctx, bx, y, w, h, h / 2); ctx.fillStyle = bg; ctx.fill(); ctx.fillStyle = fg; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, bx + w / 2, y + h / 2 + 1); ctx.restore(); return h
+}
+/* "Titulli sipër" (x.title, e.g. SUPER OFERTA NË N MOBILE!): small bold uppercase banner near the top.
+   style: 'label' (tracked text after two slashes), 'chip' (pill), 'ribbon' (slanted band).
+   Shrinks to maxW. Returns the height used incl. the gap below it; 0 when empty, so the gap closes. */
+export function topTitle(ctx, d, x, y, { style = 'label', align = 'left', z = 24, maxW = 9999, accent = '#E10600', color = '#fff', gap = 22, measure = false } = {}) {
+  const tx = (d.title || '').trim().toUpperCase(); if (!tx) return 0
+  ctx.save()
+  const set = (s) => { ctx.font = font('Montserrat', 800, s); ctx.letterSpacing = `${s * 0.14}px` }
+  const pad = (s) => (style === 'label' ? s * 1.5 : s * 1.7)
+  let s = z; set(s); let tw = ctx.measureText(tx).width
+  if (tw + pad(s) > maxW) { s = Math.max(14, (s * maxW) / (tw + pad(s))); set(s); tw = ctx.measureText(tx).width }
+  const h = style === 'label' ? s * 1.2 : s * 2, w = tw + pad(s)
+  if (measure) { ctx.restore(); return h + gap }
+  const bx = align === 'center' ? x - w / 2 : align === 'right' ? x - w : x
+  ctx.textBaseline = 'middle'; ctx.textAlign = 'left'
+  if (style === 'label') { slashes(ctx, bx, y, h, accent, 2); ctx.fillStyle = color; ctx.fillText(tx, bx + s * 1.5, y + h / 2 + 1) }
+  else {
+    if (style === 'chip') { rr(ctx, bx, y, w, h, h / 2); ctx.fillStyle = accent; ctx.fill() }
+    else slash(ctx, bx, y, w + h * 0.36, h, accent)
+    ctx.fillStyle = color; ctx.fillText(tx, bx + s * 0.85 + (style === 'ribbon' ? h * 0.18 : 0), y + h / 2 + 1)
+  }
+  ctx.restore(); return h + gap
 }
 export const deep = (t) => shade(t.accent, -0.72)
 export { drawLogo }

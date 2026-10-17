@@ -2,7 +2,7 @@ import { drawDeco, drawLogo, rr, font, fit } from '../../../lib/canvas/draw.js'
 import { stack, specParts, specIcon, hasP, fmtPrice, ASK } from '../shared/blocks.js'
 import { proPhoto, proTitle } from '../shared/pro.js'
 import { metaRows, metaRow, colorsRow } from '../shared/meta.js'
-import { safe, footer } from '../shared/kit.js'
+import { safe, footer, topTitle } from '../shared/kit.js'
 
 // =============== KARTA: karta gri të rrumbullakëta; bosh = fshihet, të tjerat zgjerohen ===============
 export default function cards(ctx, W, H, d, t) {
@@ -13,7 +13,10 @@ export default function cards(ctx, W, H, d, t) {
   const card = (x, y, w, h, fill = grey) => { rr(ctx, x, y, w, h, R); ctx.fillStyle = fill; ctx.fill() }
   drawLogo(ctx, M, st ? 120 : top, 50, 'red', d.logo)
   const fh = footer(ctx, W, bottom, d, { color: '#333', icon: t.accent, M })
-  const y0 = top + (st ? 0 : 80), y1 = bottom - fh - (fh ? 12 : 0)
+  let y0 = top + (st ? 0 : 80)
+  if (st) y0 += topTitle(ctx, d, M, y0, { style: 'chip', accent: t.accent, color: '#fff', z: 24, maxW: W - 2 * M, gap: 18 })
+  else topTitle(ctx, d, W - M, top + 4, { style: 'chip', align: 'right', accent: t.accent, color: '#fff', z: 20, maxW: W - 2 * M - 300 })
+  const y1 = bottom - fh - (fh ? 12 : 0)
   // karta e poshtme: seria + modeli + CTA
   const botH = st ? 380 : 290
   const by = y1 - botH

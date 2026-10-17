@@ -2,7 +2,7 @@ import { drawDeco, drawLogo, photoBg, cutout } from '../../../lib/canvas/draw.js
 import { stack, shade } from '../shared/blocks.js'
 import { proTitle } from '../shared/pro.js'
 import { glow } from '../shared/silk.js'
-import { safe, footer } from '../shared/kit.js'
+import { safe, footer, topTitle } from '../shared/kit.js'
 import { onDark } from '../shared/styles.js'
 
 // =============== DETAJ: telefoni i zmadhuar (fokus te kamera), pak tekst ===============
@@ -30,7 +30,9 @@ export default function detail(ctx, W, H, d, t) {
   drawLogo(ctx, M, st ? 120 : top, 50, 'white', d.logo)
   const fh = footer(ctx, W, bottom, d, { color: 'rgba(255,255,255,.75)', icon: t.accent, M })
   // pak tekst: seria + modeli + çmimi
-  const boxH = st ? 420 : 330, y0 = bottom - fh - boxH
+  const boxH = st ? 420 : 330, tt = { style: 'label', accent: t.accent, color: '#fff', z: st ? 26 : 22, maxW: W - 2 * M, gap: 16 }
+  const tH = topTitle(ctx, d, 0, 0, { ...tt, measure: true }), y0 = bottom - fh - boxH
+  topTitle(ctx, d, M, y0 - tH, tt)
   const th = proTitle(ctx, d, M, y0, W * 0.7, st ? 92 : 78, t, { color: '#fff', maxLines: 2 })
   stack(ctx, d, t, onDark(t, { skip: { spec: true, colors: true, meta: true, info: true, slogan: true }, price: 84 }), M, y0 + th + 16, W - 2 * M, boxH - th - 16, 'top')
   drawDeco(ctx, W, H, t, 'front', true)

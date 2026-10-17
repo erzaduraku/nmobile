@@ -15,21 +15,31 @@ import { SIZES, smartCase, normOffer } from './shared/blocks.js'
 export { REGIONS } from './shared/meta.js'
 export { SIZES, fmtPrice, specParts, smartCase, normOffer } from './shared/blocks.js'
 
+/* fields = optional inputs (Detajet step) that the design really draws; storyFields = drawn only in
+   the Story format. Always drawn by every design (not listed): model, series, price, cta, contact.
+   Keys: title, slogan, offer, oldPrice, badge (seriesBadge), meta (capacity, model code, region,
+   No Active, condition, notes), spec, colors, info, photo2. Verified by rendering each field on/off. Keep in sync with designs/*.js. */
 export const TEMPLATES = [
-  { id: 'hero', name: 'Hero i kuq', draw: hero },
-  { id: 'red', name: 'E kuqe e plotë', draw: red },
-  { id: 'studio', name: 'Studio', draw: studio },
-  { id: 'catalog', name: 'Katalog i bardhë', draw: catalog },
-  { id: 'bento', name: 'Bento', draw: bento },
-  { id: 'offer2', name: 'Ofertë', draw: offer2 },
-  { id: 'stock', name: 'Sot në stok', draw: stock },
-  { id: 'diagonal', name: 'Diagonale', draw: diagonal },
-  { id: 'detail', name: 'Detaj', draw: detail },
-  { id: 'duo', name: 'Dy produkte', draw: duo },
-  { id: 'pricehero', name: 'Çmimi si hero', draw: pricehero },
-  { id: 'specsheet', name: 'Specifikime', draw: specsheet },
-  { id: 'cards', name: 'Karta', draw: cards },
+  { id: 'hero', name: 'Hero i kuq', draw: hero, fields: ['title', 'offer', 'oldPrice', 'slogan', 'meta', 'badge', 'spec', 'colors', 'info'] },
+  { id: 'red', name: 'E kuqe e plotë', draw: red, fields: ['title', 'offer', 'oldPrice', 'slogan', 'meta', 'badge', 'spec', 'colors', 'info'] },
+  { id: 'studio', name: 'Studio', draw: studio, fields: ['title', 'offer', 'oldPrice', 'slogan', 'meta', 'badge', 'spec', 'colors', 'info'] },
+  { id: 'catalog', name: 'Katalog i bardhë', draw: catalog, fields: ['title', 'offer', 'oldPrice', 'slogan', 'meta', 'badge', 'spec', 'colors', 'info'] },
+  { id: 'bento', name: 'Bento', draw: bento, fields: ['title', 'offer', 'oldPrice', 'slogan', 'meta', 'badge', 'spec', 'colors', 'info'] },
+  { id: 'offer2', name: 'Ofertë', draw: offer2, fields: ['title', 'offer', 'oldPrice', 'spec'], storyFields: ['info'] },
+  { id: 'stock', name: 'Sot në stok', draw: stock, fields: ['title', 'oldPrice'], storyFields: ['spec'] },
+  { id: 'diagonal', name: 'Diagonale', draw: diagonal, fields: ['title', 'oldPrice', 'spec', 'info'] },
+  { id: 'detail', name: 'Detaj', draw: detail, fields: ['title', 'oldPrice'] },
+  { id: 'duo', name: 'Dy produkte', draw: duo, fields: ['title', 'oldPrice', 'photo2'] },
+  { id: 'pricehero', name: 'Çmimi si hero', draw: pricehero, fields: ['title', 'offer', 'oldPrice', 'slogan', 'meta', 'badge', 'spec', 'colors', 'info'] },
+  { id: 'specsheet', name: 'Specifikime', draw: specsheet, fields: ['title', 'oldPrice', 'badge', 'spec'], storyFields: ['meta'] },
+  { id: 'cards', name: 'Karta', draw: cards, fields: ['title', 'offer', 'oldPrice', 'slogan', 'meta', 'badge', 'spec', 'colors', 'info'] },
 ]
+
+export const ALWAYS_FIELDS = ['model', 'series', 'price', 'cta']
+export function templateFields(tplId, type = 'post') {
+  const t = TEMPLATES.find((x) => x.id === tplId) || TEMPLATES[0]
+  return new Set([...ALWAYS_FIELDS, ...(t.fields || []), ...(type === 'story' ? t.storyFields || [] : [])])
+}
 
 export function renderTo(canvas, tplId, type, theme, data, scale = 1) {
   const { w, h } = SIZES[type]

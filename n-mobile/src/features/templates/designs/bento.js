@@ -9,9 +9,9 @@ export default function bento(ctx, W, H, d, t) {
   const card = '#222228'
   const top = st ? 160 : 44
   drawLogo(ctx, M + 6, top, 54, 'dark', d.logo)
-  const head = badgeFor(t, d).toUpperCase()
-  ctx.save(); ctx.font = font('Montserrat', 800, 24); ctx.letterSpacing = '4px'; const hw = ctx.measureText(head).width; ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.textAlign = 'right'; ctx.fillText(head, W - M - 6, top + 38); ctx.restore()
-  slashes(ctx, W - M - hw - 54, top + 14, 28, t.accent, 2)
+  const head = ((d.title || '').trim() || badgeFor(t, d)).toUpperCase()
+  ctx.save(); let hz = 24; ctx.font = font('Montserrat', 800, hz); ctx.letterSpacing = '4px'; const hmax = W - 2 * M - 400; if (ctx.measureText(head).width > hmax) { hz = Math.max(14, hz * hmax / ctx.measureText(head).width); ctx.font = font('Montserrat', 800, hz) } const hw = ctx.measureText(head).width; ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.textAlign = 'right'; ctx.fillText(head, W - M - 6, top + 38); ctx.restore()
+  slashes(ctx, W - M - hw - 54, top + 14 + (24 - hz) * 0.6, 28 * hz / 24, t.accent, 2)
   let y = top + 96
   const bottom = H - (st ? 220 : 40)
   const LW = Math.round((W - 2 * M - G) * 0.58), RW = W - 2 * M - G - LW, RX = M + LW + G
@@ -26,7 +26,10 @@ export default function bento(ctx, W, H, d, t) {
   cutCard(ctx, RX, y, RW, prH, pg)
   ctx.save(); ctx.globalAlpha = 0.18; slashes(ctx, RX + RW - 120, y + 20, prH - 40, '#fff', 2); ctx.restore()
   ctx.fillStyle = ink(t.accent); ctx.textAlign = 'left'
-  ctx.font = font('Montserrat', 700, 24); ctx.globalAlpha = 0.85; ctx.fillText('ÇMIMI', RX + 34, y + 60); ctx.globalAlpha = 1
+  ctx.font = font('Montserrat', 700, 24); ctx.globalAlpha = 0.85; ctx.fillText('ÇMIMI', RX + 34, y + 60)
+  const old = (d.oldPrice || '').trim() && hasP(d) ? fmtPrice(d.oldPrice) : ''
+  if (old) { ctx.font = font('Montserrat', 700, 26); ctx.textAlign = 'right'; const ow = ctx.measureText(old).width; ctx.fillText(old, RX + RW - 34, y + 60); ctx.fillRect(RX + RW - 34 - ow - 4, y + 51, ow + 8, 3); ctx.textAlign = 'left' }
+  ctx.globalAlpha = 1
   if (hasP(d)) { fit(ctx, fmtPrice(d.price), t.head.f, 800, 110, RW - 68, 30, t.head.s); ctx.fillText(fmtPrice(d.price), RX + 34, y + prH - 46) }
   else { const w2 = wrapFit(ctx, ASK, 'Montserrat', 800, 44, RW - 68, 2, 24); drawLines(ctx, w2.lines, RX + 34, y + prH - 50 - (w2.lines.length - 1) * w2.size * 1.1, w2.size * 1.1) }
   // pllaka e specifikave

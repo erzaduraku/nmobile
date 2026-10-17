@@ -49,6 +49,17 @@ export function photoBg(img) {
   if (BG.has(img)) return BG.get(img)
   const c = document.createElement('canvas'); c.width = 64; c.height = 64; const x = c.getContext('2d', { willReadFrequently: true })
   x.drawImage(img, 0, 0, 64, 64); const px = x.getImageData(0, 0, 64, 64).data
+  // Already cut out (PNG with transparency): no background to guess, box = visible pixels.
+  // (Before this, transparent pixels were read as black and the flood fill ate dark phone edges.)
+  let clear = 0; for (let i = 3; i < px.length; i += 4) if (px[i] < 200) clear++
+  if (clear > 64) {
+    let x0 = 64, y0 = 64, x1 = -1, y1 = -1
+    for (let yy = 0; yy < 64; yy++) for (let xx = 0; xx < 64; xx++) if (px[(yy * 64 + xx) * 4 + 3] > 16) { x0 = Math.min(x0, xx); y0 = Math.min(y0, yy); x1 = Math.max(x1, xx); y1 = Math.max(y1, yy) }
+    const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height, fx = iw / 64, fy = ih / 64
+    const r = { uniform: false, alpha: true, color: '#ffffff', light: true }
+    if (x1 >= x0) { const bx = Math.max(0, (x0 - 1) * fx), by = Math.max(0, (y0 - 1) * fy); r.box = [bx, by, Math.min(iw, (x1 + 2) * fx) - bx, Math.min(ih, (y1 + 2) * fy) - by] }
+    BG.set(img, r); return r
+  }
   const sm = []; for (let i = 0; i < 64; i++) for (const [u, v] of [[i, 0], [i, 63], [0, i], [63, i], [i, 1], [1, i], [62, i], [i, 62]]) { const o = (v * 64 + u) * 4; sm.push([px[o], px[o + 1], px[o + 2]]) }
   const avg = [0, 1, 2].map((k) => sm.reduce((a, p) => a + p[k], 0) / sm.length)
   const dev = Math.sqrt(sm.reduce((a, p) => a + (p[0] - avg[0]) ** 2 + (p[1] - avg[1]) ** 2 + (p[2] - avg[2]) ** 2, 0) / sm.length)
@@ -70,7 +81,7 @@ export function drawPhoto(ctx, img, x, y, w, h, { r = 0, mode = 'auto', bg = nul
     const info = photoBg(img)
     let m = mode
     if (m === 'auto') m = 'contain' // produkti nuk pritet kurrë
-    ctx.fillStyle = info.uniform ? info.color : (bg || info.color); ctx.fillRect(x, y, w, h)
+    if (!info.alpha || bg) { ctx.fillStyle = info.uniform ? info.color : (bg || info.color); ctx.fillRect(x, y, w, h) } // cut-outs sit on the card itself
     const [sx, sy, iw, ih] = m === 'contain' && info.box ? info.box : [0, 0, img.naturalWidth || img.width, img.naturalHeight || img.height]
     const p2 = m === 'contain' ? Math.max(pad, Math.min(w, h) * 0.07) : pad
     const bx = x + p2, by = y + p2, bw = w - p2 * 2, bh = h - p2 * 2
@@ -245,7 +256,11 @@ export function cutout(img) {
   if (CUT.has(img)) return CUT.get(img)
   const info = photoBg(img)
   let res = null
-  if (info.uniform) {
+  if (info.alpha) { // cut-out photo: use it as is (cropped to the visible product)
+    const [sx, sy, iw, ih] = info.box || [0, 0, img.naturalWidth || img.width, img.naturalHeight || img.height]
+    const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(iw)); c.height = Math.max(1, Math.round(ih))
+    c.getContext('2d').drawImage(img, sx, sy, iw, ih, 0, 0, c.width, c.height); res = c
+  } else if (info.uniform) {
     const [sx, sy, iw, ih] = info.box || [0, 0, img.naturalWidth || img.width, img.naturalHeight || img.height]
     const pad = Math.round(Math.max(iw, ih) * 0.02)
     const k = Math.min(1, 1400 / Math.max(iw, ih))

@@ -2,6 +2,7 @@ import { drawLogo, drawDeco, font, rr } from '../../../lib/canvas/draw.js'
 import { stack, shade } from '../shared/blocks.js'
 import { proPhoto, proTitle, proPill } from '../shared/pro.js'
 import { silkBg, glow } from '../shared/silk.js'
+import { topTitle } from '../shared/kit.js'
 
 // =============== HERO I KUQ (e zezë -> e kuqe e thellë, valë mëndafshi) ===============
 export default function hero(ctx, W, H, d, t) {
@@ -17,6 +18,7 @@ export default function hero(ctx, W, H, d, t) {
   // teksti majtas
   const lw = st ? W - 2 * M : W * 0.5
   let y = top + (st ? 150 : 140)
+  y += topTitle(ctx, d, M, y, { style: 'ribbon', accent: t.accent, color: '#fff', z: st ? 26 : 23, maxW: lw })
   y += proTitle(ctx, d, M, y, lw, st ? 124 : 104, t, { color: '#fff', maxLines: 3 }) + 18
   if (d.offer) {
     ctx.save(); ctx.font = font('Montserrat', 800, 40); const tw = ctx.measureText(d.offer).width

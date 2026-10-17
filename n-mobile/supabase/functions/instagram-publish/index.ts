@@ -35,8 +35,14 @@ Deno.serve(async (req) => {
     const r2 = await fetch(`${GRAPH}/${acc.ig_user_id}/media_publish`, { method: 'POST', body: new URLSearchParams({ creation_id: c.id, access_token: token }) })
     const pub = await r2.json()
     if (!r2.ok || !pub.id) return json({ error: pub.error?.message || 'Publish failed', details: pub }, 400)
-    const link = await (await fetch(`${GRAPH}/${pub.id}?fields=permalink&access_token=${token}`)).json()
-    return json({ id: pub.id, permalink: link.permalink || null })
+    // 5) public link of the new post (the app stores it for "Hape në Instagram"); retry once, it can lag
+    let permalink: string | null = null
+    for (let i = 0; i < 2 && !permalink; i++) {
+      if (i) await new Promise((r) => setTimeout(r, 1500))
+      const link = await (await fetch(`${GRAPH}/${pub.id}?fields=permalink&access_token=${token}`)).json()
+      permalink = link.permalink || null
+    }
+    return json({ id: pub.id, permalink })
   } catch (e) { return json({ error: String(e) }, 500) }
   finally { if (path) await db.storage.from('ig-temp').remove([path]) }
 })

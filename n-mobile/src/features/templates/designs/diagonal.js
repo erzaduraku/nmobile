@@ -1,7 +1,7 @@
 import { drawDeco, drawLogo } from '../../../lib/canvas/draw.js'
 import { stack, shade } from '../shared/blocks.js'
 import { proPhoto, proTitle } from '../shared/pro.js'
-import { safe, footer } from '../shared/kit.js'
+import { safe, footer, topTitle } from '../shared/kit.js'
 import { onDark } from '../shared/styles.js'
 
 // =============== DIAGONALE: gjysmë e kuqe / gjysmë e zezë, telefoni mbi vijën ndarëse ===============
@@ -17,6 +17,7 @@ export default function diagonal(ctx, W, H, d, t) {
   drawLogo(ctx, M, st ? 120 : top, 50, 'white', d.logo)
   let y = top + (st ? 10 : 90)
   const tw = W * 0.56
+  y += topTitle(ctx, d, M, y, { style: 'ribbon', accent: '#111', color: '#fff', z: st ? 26 : 22, maxW: tw })
   y += proTitle(ctx, d, M, y, tw, st ? 104 : 86, { ...t, accent: '#111' }, { color: '#fff', maxLines: 3 })
   // telefoni djathtas, mbi vijë
   const pcx = W * 0.7, pcy = (yL + yR) / 2 + (st ? 40 : 30)

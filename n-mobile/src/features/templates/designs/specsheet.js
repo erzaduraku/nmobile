@@ -1,7 +1,7 @@
 import { drawDeco, drawLogo } from '../../../lib/canvas/draw.js'
 import { stack } from '../shared/blocks.js'
 import { proPhoto, proTitle } from '../shared/pro.js'
-import { safe, footer, chip } from '../shared/kit.js'
+import { safe, footer, chip, topTitle } from '../shared/kit.js'
 import { onLight } from '../shared/styles.js'
 import { glow } from '../shared/silk.js'
 
@@ -12,6 +12,7 @@ export default function specsheet(ctx, W, H, d, t) {
   drawDeco(ctx, W, H, t, 'back', false)
   drawLogo(ctx, W / 2, st ? 120 : top, 50, 'red', d.logo, 'center')
   let y = top + (st ? 10 : 84)
+  y += topTitle(ctx, d, W / 2, y, { style: 'label', align: 'center', accent: t.accent, color: t.accent, z: st ? 26 : 22, maxW: W - 2 * M, gap: 20 })
   if ((d.seriesBadge || '').trim()) { chip(ctx, d.seriesBadge.trim(), W / 2, y, 24, '#111', '#fff', 'center'); y += 72 }
   y += proTitle(ctx, d, W / 2, y, W - 2 * M, st ? 120 : 80, t, { color: '#111', align: 'center', maxLines: 2 }) + 6
   const textH = st ? 600 : 400

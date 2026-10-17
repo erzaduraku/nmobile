@@ -3,9 +3,11 @@ import { renderTo, fontsReady } from '../features/templates/index.js'
 import { themeById } from '../features/themes/themes.js'
 import { makeCaption } from '../features/editor/caption.js'
 import { loadSettings, saveSettings } from '../features/settings/settingsApi.js'
-import { savePost, listPosts, deletePost } from '../features/posts/postsApi.js'
-import { finishInstagramLogin, getInstagramAccount, publishToInstagram } from '../features/instagram/instagram.js'
-import { LS, loadImg, readFile } from '../lib/storage.js'
+import { savePost, listPosts, deletePost, postStatus } from '../features/posts/postsApi.js'
+import { finishInstagramLogin, getInstagramAccount, publishToInstagram, findPermalinks, igProfileUrl } from '../features/instagram/instagram.js'
+import { LS, loadImg } from '../lib/storage.js'
+import { floodRemove, aiRemove, canFlood } from '../lib/bgRemove.js'
+import { idbPut, idbGet, idbDel, idbKeys, photoKey, blobToImg, blobToDataURL, dataURLToBlob, fetchBlob, prepPhoto } from '../lib/photoStore.js'
 import { TABS } from '../app/tabs.js'
 import { EMPTY_X, EMPTY_CONTACT } from '../features/editor/fields.js'
 import { EMPTY_SPECS, composeSpec, parseSpec } from '../features/editor/specFields.js'
@@ -36,7 +38,20 @@ export default function useEditor(user) {
   const [region, setRegion] = useState('')
   const [noActive, setNoActive] = useState(false)
   const [draftId, setDraftId] = useState(null)
-  const [photoPath, setPhotoPath] = useState(null)
+  // Draft/post identity and its product photos. Refs (not state) so queued/debounced saves
+  // always see the latest values. id = client uuid of the row (server and device).
+  const idRef = useRef(null)
+  const pathsRef = useRef({})                                // { image_path, photo_path, photo2_path } on the server row
+  // blob = photo the templates use (cut-out PNG after background removal), orig = the photo as uploaded
+  // (only kept while the background is removed, so "Rikthe origjinalin" works after reload); dirty = not yet on server
+  const photoRef = useRef({ blob: null, orig: null, dirty: false })
+  const [bg, setBg] = useState({ removed: false, smooth: false, busy: '', progress: 0 }) // background-removal UI state
+  const photo2Saved = useRef('')                             // x.photo2 value last uploaded to the server row
+  const restoring = useRef(false), warned = useRef(false)
+  const [photoMissing, setMissingState] = useState(false)   // reopened draft whose photo was never saved
+  const missingRef = useRef(false)
+  const setPhotoMissing = (v) => { missingRef.current = v; setMissingState(v) }
+  const [opening, setOpening] = useState(null)               // id of the post being reopened
   const [draftState, setDraftState] = useState('') // '' | 'saving' | 'saved'
   const draftT = useRef(null), dirty = useRef(false)
   const [info, setInfo] = useState(LS.get('info'))
@@ -63,7 +78,7 @@ export default function useEditor(user) {
       const c = document.createElement('canvas'); await fontsReady(); renderTo(c, tpl, type, th, data, 1)
       const jpg = c.toDataURL('image/jpeg', 0.92)
       const r = await publishToInstagram(jpg, caption, type)
-      setIgLink(r.permalink || ''); say('U postua në Instagram'); c.toBlob((b) => b && remember(b), 'image/png')
+      setIgLink(r.permalink || ''); say('U postua në Instagram'); c.toBlob((b) => b && remember(b, { ig_media_id: r.id || null, ig_permalink: r.permalink || null }), 'image/png')
     } catch (e) { say('Postimi dështoi: ' + e.message) }
     setIgBusy(false)
   }
@@ -72,65 +87,162 @@ export default function useEditor(user) {
   const localPosts = () => { try { return JSON.parse(LS.get('posts', '[]')) } catch { return [] } }
   async function refreshPosts() {
     setPostsBusy(true)
-    try { setPosts(user ? await listPosts() : localPosts()) } catch { setPosts(localPosts()); say('Postimet nuk u ngarkuan nga serveri') }
+    try {
+      if (user) {
+        // server rows + drafts that could only be saved on this device (synced on the next successful save)
+        const server = await listPosts(), ids = new Set(server.map((p) => p.id))
+        const pend = localPosts().filter((p) => p.pending === user.id && !ids.has(p.id))
+        setPosts([...pend, ...server].sort((a, b) => String(b.updated_at || b.created_at).localeCompare(String(a.updated_at || a.created_at))))
+      } else setPosts(localPosts().filter((p) => !p.pending))
+    } catch { setPosts(localPosts()); say('Postimet nuk u ngarkuan nga serveri') }
     setPostsBusy(false)
   }
   useEffect(() => { refreshPosts() }, [user])
-  const metaNow = (status) => ({ model, price, offer, spec, info, cta, model_code: code, region, no_active: noActive, extra: x, template: tpl, type, theme, caption, status })
-  async function photoJpeg() { if (!img) return null; const c = document.createElement('canvas'); const k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight)); c.width = img.naturalWidth * k; c.height = img.naturalHeight * k; c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); return new Promise((r) => c.toBlob(r, 'image/jpeg', 0.85)) }
+  // Linku i Instagramit për postimet e vjetra pa ig_permalink (kërkohet një herë për seancë)
+  const linkTried = useRef(new Set())
+  useEffect(() => {
+    if (!user || !ig) return
+    const need = posts.filter((p) => postStatus(p) === 'posted' && !p.ig_permalink && !linkTried.current.has(p.id))
+    if (!need.length) return
+    need.forEach((p) => linkTried.current.add(p.id))
+    findPermalinks(need.map((p) => ({ id: p.id, media_id: p.ig_media_id || null, caption: p.caption || '', at: p.updated_at || p.created_at })))
+      .then(({ links }) => {
+        if (!links || !Object.keys(links).length) return
+        setPosts((list) => list.map((p) => (links[p.id] ? { ...p, ig_permalink: links[p.id] } : p)))
+        const loc = localPosts(); if (loc.some((p) => links[p.id])) LS.set('posts', JSON.stringify(loc.map((p) => (links[p.id] ? { ...p, ig_permalink: links[p.id] } : p))))
+      }).catch(() => {})
+  }, [posts, ig, user])
+  // Ku të çojë "Hape në Instagram": postimi i saktë, ose profili nëse linku s'dihet
+  // Only for rows published to Instagram (media id or permalink); null otherwise
+  const igUrlFor = (p) => (postStatus(p) === 'posted' ? p.ig_permalink || igProfileUrl(ig?.username || contact.instagram) : null)
+  // photo2 is kept out of `extra` (it is stored as a file, see persistNow)
+  const metaNow = (status) => ({ model, price, offer, spec, info, cta, model_code: code, region, no_active: noActive, extra: { ...x, photo2: '' }, template: tpl, type, theme, caption, status })
   function thumb(q = 0.25) { const c = document.createElement('canvas'); renderTo(c, tpl, type, th, data, q); return c }
-  // Lokal: lista me postime/drafte (drafti ruan edhe foton e zvogëluar)
-  function saveLocal(row) {
-    const list = localPosts().filter((x) => x.id !== row.id)
-    const drafts = [row, ...list].filter((x) => x.status === 'draft')
-    const keep = new Set(drafts.slice(0, 10).map((x) => x.id))
-    const out = [row, ...list].filter((x) => x.status !== 'draft' || keep.has(x.id)).slice(0, 40)
-    try { LS.set('posts', JSON.stringify(out)) } catch { try { LS.set('posts', JSON.stringify(out.map((x) => (x.id === row.id ? x : { ...x, photoUrl: undefined })))) } catch {} }
+  const toBlob = (c, t, q) => new Promise((res, rej) => { try { c.toBlob((b) => (b ? res(b) : rej(new Error('toBlob failed'))), t, q) } catch (e) { rej(e) } })
+  const newId = () => (globalThis.crypto?.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => { const r = (Math.random() * 16) | 0; return (ch === 'x' ? r : (r & 3) | 8).toString(16) }))
+  // Device list (localStorage): metadata + small thumbnail only; photos are in IndexedDB.
+  function writeLocal(out) {
+    try { localStorage.setItem('nm_posts', JSON.stringify(out)); return true } catch {}
+    try { localStorage.setItem('nm_posts', JSON.stringify(out.map((p, i) => (i ? { ...p, url: undefined } : p)))); return true } catch { return false }
   }
-  async function persist(status, blob) {
-    const meta = metaNow(status)
+  function saveLocalRow(row) {
+    const all = [row, ...localPosts().filter((p) => p.id !== row.id)]
+    const keep = new Set(all.filter((p) => p.status === 'draft').slice(0, 15).map((p) => p.id))
+    const out = all.filter((p) => p.status !== 'draft' || keep.has(p.id)).slice(0, 40)
+    const ok = writeLocal(out)
+    const ids = new Set(out.map((p) => p.id))
+    idbKeys().then((ks) => { const drop = ks.filter((k) => !ids.has(String(k).split(':')[0])); if (drop.length) idbDel(...drop) })
+    return ok
+  }
+  function removeLocal(id) {
+    const list = localPosts()
+    if (list.some((p) => p.id === id)) writeLocal(list.filter((p) => p.id !== id))
+    idbDel(photoKey(id), photoKey(id, 'photo2'), photoKey(id, 'orig'))
+  }
+  async function persistNow(status, blob, igExtra) {
+    const meta = { ...metaNow(status), ...(igExtra || {}) }
+    if (!idRef.current) idRef.current = newId()
+    const id = idRef.current, p2 = x.photo2 || '', now = new Date().toISOString()
+    let serverOk = false
     if (user) {
       try {
-        const preview = blob || await new Promise((r) => thumb(0.4).toBlob(r, 'image/jpeg', 0.8))
-        const photo = status === 'draft' && !photoPath ? await photoJpeg() : null
-        const r = await savePost(user.id, meta, { id: draftId, preview, photo, photoPath })
-        if (status === 'draft') { setDraftId(r.id); setPhotoPath(r.photo_path) } else { setDraftId(null); setPhotoPath(null) }
-        return true
-      } catch (e) { /* bie te ruajtja lokale */ }
+        const files = { preview: blob || await toBlob(thumb(0.4), 'image/jpeg', 0.8) }
+        if (photoRef.current.dirty) { files.photo = photoRef.current.blob || null; files.photoOrig = photoRef.current.orig || null }
+        if (p2 !== photo2Saved.current) files.photo2 = p2 ? await dataURLToBlob(p2) : null
+        pathsRef.current = await savePost(user.id, id, meta, files, pathsRef.current)
+        photoRef.current.dirty = false; photo2Saved.current = p2; serverOk = true; warned.current = false
+        removeLocal(id) // an older device-only copy of this draft is now on the server
+      } catch (e) {
+        console.error('Saving the post to Supabase failed, keeping it on this device', e)
+        if (!warned.current) { warned.current = true; say('Serveri nuk u arrit – u ruajt vetëm në pajisje') }
+      }
     }
-    const id = draftId || String(Date.now())
-    const prev = localPosts().find((x) => x.id === id)
-    let photoUrl = prev?.photoUrl
-    if (status === 'draft' && !photoUrl && img) { const c = document.createElement('canvas'); const k = Math.min(1, 900 / Math.max(img.naturalWidth, img.naturalHeight)); c.width = img.naturalWidth * k; c.height = img.naturalHeight * k; c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); photoUrl = c.toDataURL('image/jpeg', 0.8) }
-    saveLocal({ id, created_at: prev?.created_at || new Date().toISOString(), updated_at: new Date().toISOString(), ...meta, url: thumb().toDataURL('image/jpeg', 0.75), photoUrl: status === 'draft' ? photoUrl : undefined })
-    setDraftId(status === 'draft' ? id : null)
-    return true
+    if (!serverOk) {
+      const prev = localPosts().find((r) => r.id === id)
+      try {
+        if (photoRef.current.blob) await idbPut(photoKey(id), photoRef.current.blob)
+        if (photoRef.current.orig) await idbPut(photoKey(id, 'orig'), photoRef.current.orig); else await idbDel(photoKey(id, 'orig'))
+        if (p2) await idbPut(photoKey(id, 'photo2'), await dataURLToBlob(p2)); else await idbDel(photoKey(id, 'photo2'))
+      } catch (e) { console.error('IndexedDB', e) }
+      let url = ''; try { url = thumb().toDataURL('image/jpeg', 0.75) } catch {}
+      saveLocalRow({ id, created_at: prev?.created_at || now, updated_at: now, ...meta, url, hasPhoto: Boolean(photoRef.current.blob), pending: user ? user.id : undefined, image_path: undefined })
+    }
+    if (status !== 'posted') setDraftId(id) // draft / exported: later edits keep updating this row
+    else { // rows published to Instagram are final: further edits become a new draft with its own photo copies
+      idRef.current = null; pathsRef.current = {}; photoRef.current.dirty = Boolean(photoRef.current.blob); photo2Saved.current = ''; setDraftId(null)
+    }
+    return serverOk || !user
   }
-  // Eksporti / postimi: drafti bëhet "posted"
-  async function remember(blob) { clearTimeout(draftT.current); dirty.current = false; await persist('posted', blob); refreshPosts() }
+  // One save at a time (autosave + manual save + export must not race)
+  const saveQ = useRef(Promise.resolve())
+  const persist = (...a) => (saveQ.current = saveQ.current.then(() => persistNow(...a)).catch((e) => { console.error(e); return false }))
+  // Download/share -> 'exported'; only a successful direct Instagram publish (has a media id) -> 'posted'
+  async function remember(blob, ig) { clearTimeout(draftT.current); dirty.current = false; await persist(ig?.ig_media_id ? 'posted' : 'exported', blob, ig); refreshPosts() }
   async function saveDraft(silent) {
     if (!img) return
     clearTimeout(draftT.current); dirty.current = false; setDraftState('saving')
     await persist('draft'); setDraftState('saved'); refreshPosts(); if (!silent) say('U ruajt si draft')
   }
-  async function reuse(p) {
-    setModel(p.model || ''); setPrice(p.price || ''); setOffer(p.offer || ''); setSpec(p.spec || ''); setInfo(p.info || ''); setCta(p.cta || '')
-    setXAll({ ...EMPTY_X, ...(p.extra || {}) }); setCode(p.model_code || ''); setRegion(p.region || ''); setNoActive(Boolean(p.no_active))
-    setTpl(p.template); setType(p.type); setTheme(p.theme)
-    const isDraft = p.status === 'draft'
-    setDraftId(isDraft ? p.id : null); setPhotoPath(isDraft ? p.photo_path || null : null)
-    let ok = false
-    if (p.photoUrl) { try { setImg(await loadImg(p.photoUrl)); ok = true } catch {} }
-    dirty.current = false
-    setTab(ok || img ? 'detajet' : 'foto'); say(ok ? (isDraft ? 'Drafti u hap' : 'Të dhënat u ngarkuan') : img ? 'Të dhënat u ngarkuan' : 'Ngarko foton, të dhënat u ngarkuan')
+  // Stored photo of a row: device copy (IndexedDB) first, then the server file, then legacy inline dataURLs.
+  async function photoOf(p, which) {
+    const local = await idbGet(photoKey(p.id, which))
+    if (local) return local
+    if (which === 'orig') return p.pending ? null : fetchBlob(p.photoOrigUrl)
+    return which === 'photo' ? fetchBlob(p.photoUrl) : fetchBlob(p.photo2Url || p.extra?.photo2 || '')
   }
-  function newPost() { setDraftId(null); setPhotoPath(null); setModel(''); setPrice(''); setOffer(''); setSpec(''); setXAll(EMPTY_X); setCode(''); setRegion(''); setNoActive(false); setCaptionEdited(false); dirty.current = false }
+  async function reuse(p) {
+    setOpening(p.id)
+    try {
+      await saveQ.current
+      const [b1, b2, b0] = await Promise.all([photoOf(p, 'photo'), photoOf(p, 'photo2'), photoOf(p, 'orig')])
+      let im = null; if (b1) { try { im = await blobToImg(b1) } catch {} }
+      let p2 = ''; if (b2) { try { p2 = await blobToDataURL(b2) } catch {} }
+      const pst = postStatus(p), isDraft = pst !== 'posted' // drafts and exported posts are edited in place
+      clearTimeout(draftT.current); dirty.current = false
+      restoring.current = true; setTimeout(() => { restoring.current = false }, 500)
+      setModel(p.model || ''); setPrice(p.price || ''); setOffer(p.offer || ''); setSpec(p.spec || ''); setInfo(p.info || ''); setCta(p.cta || '')
+      setXAll({ ...EMPTY_X, ...(p.extra || {}), photo2: p2 }); setCode(p.model_code || ''); setRegion(p.region || ''); setNoActive(Boolean(p.no_active))
+      setTpl(p.template || 'hero'); setType(p.type || 'post'); setTheme(p.theme || 'standard')
+      // Draft: keep editing the same row. Posted: edits become a new draft (new id, own copies).
+      idRef.current = isDraft ? p.id : null
+      pathsRef.current = isDraft && !p.pending ? { image_path: p.image_path || null, photo_path: p.photo_path || null, photo2_path: p.photo2_path || null, photo_orig_path: p.photo_orig_path || null } : {}
+      photoRef.current = { blob: im ? b1 : null, orig: im ? b0 || null : null, dirty: im ? !(isDraft && p.photo_path) : false }
+      // Older photos with a solid background (white box): offer the same "Hiq sfondin" toggle
+      let smooth = false, cut = Boolean(b0)
+      if (im && !b0) { try { const a = await canFlood(b1); smooth = a.smooth; cut = a.alpha } catch {} }
+      setBg({ removed: cut, smooth, busy: '', progress: 0 })
+      photo2Saved.current = isDraft && p.photo2_path ? p2 : ''
+      setDraftId(isDraft ? p.id : null); setDraftState('')
+      setImg(im); setPhotoMissing(!im)
+      const offerBg = im && !cut && smooth
+      setTab(im && !offerBg ? 'detajet' : 'foto')
+      say(offerBg ? 'Mund ta heqësh sfondin e fotos me “Hiq sfondin”' : im ? (pst === 'draft' ? 'Drafti u hap' : pst === 'exported' ? 'Postimi u hap' : 'Të dhënat u ngarkuan') : 'Fotoja e produktit mungon – ngarkoje përsëri, të dhënat u ruajtën')
+    } finally { setOpening(null) }
+  }
+  function newPost() {
+    idRef.current = null; pathsRef.current = {}; photoRef.current = { blob: null, orig: null, dirty: false }; photo2Saved.current = ''
+    setBg({ removed: false, smooth: false, busy: '', progress: 0 })
+    setDraftId(null); setDraftState(''); setPhotoMissing(false); setModel(''); setPrice(''); setOffer(''); setSpec(''); setXAll(EMPTY_X); setCode(''); setRegion(''); setNoActive(false); setCaptionEdited(false); dirty.current = false
+  }
   async function removePost(p) {
-    if (user && p.image_path) { try { await deletePost(p) } catch { say('Fshirja dështoi'); return } }
-    else LS.set('posts', JSON.stringify(localPosts().filter((x) => x.id !== p.id)))
-    if (p.id === draftId) { setDraftId(null); setPhotoPath(null) }
+    if (user && !p.pending) { try { await deletePost(p) } catch { say('Fshirja dështoi'); return } }
+    removeLocal(p.id)
+    if (p.id === idRef.current) { idRef.current = null; pathsRef.current = {}; photoRef.current.dirty = Boolean(photoRef.current.blob); photo2Saved.current = ''; setDraftId(null) }
     refreshPosts()
   }
+  // One-time move of photos that older versions kept as dataURLs inside localStorage into IndexedDB.
+  useEffect(() => {
+    (async () => {
+      const moved = {}
+      for (const p of localPosts()) {
+        const m = {}
+        if (typeof p.photoUrl === 'string' && p.photoUrl.startsWith('data:')) { try { await idbPut(photoKey(p.id), await dataURLToBlob(p.photoUrl)); m.photoUrl = undefined; m.hasPhoto = true } catch {} }
+        if (typeof p.extra?.photo2 === 'string' && p.extra.photo2.startsWith('data:')) { try { await idbPut(photoKey(p.id, 'photo2'), await dataURLToBlob(p.extra.photo2)); m.extra = { ...p.extra, photo2: '' } } catch {} }
+        if (Object.keys(m).length) moved[p.id] = m
+      }
+      if (Object.keys(moved).length) writeLocal(localPosts().map((p) => (moved[p.id] ? { ...p, ...moved[p.id] } : p)))
+    })()
+  }, [])
 
   useEffect(() => { fontsReady().then(() => setReady(true)) }, [])
   useEffect(() => { LS.set('theme', theme) }, [theme])
@@ -156,6 +268,7 @@ export default function useEditor(user) {
   const firstRun = useRef(true)
   useEffect(() => {
     if (firstRun.current) { firstRun.current = false; return }
+    if (restoring.current) { restoring.current = false; return } // state just loaded from a saved draft
     if (!img) return
     dirty.current = true; setDraftState('')
     clearTimeout(draftT.current)
@@ -163,7 +276,42 @@ export default function useEditor(user) {
   }, [img, model, price, offer, spec, info, cta, code, region, noActive, x, tpl, type, theme])
 
   function say(m) { setToast(m); setTimeout(() => setToast(''), 2600) }
-  async function onPhoto(e) { const f = e.target.files?.[0]; if (!f) return; setImg(await loadImg(await readFile(f))); setPhotoPath(null); setTab('template'); e.target.value = '' }
+  // Picked product photo: downscaled once (max 1600 px, PNG kept if transparent) and kept as a Blob,
+  // so drafts store exactly what the editor shows.
+  // Solid/gradient backgrounds (any colour) are removed automatically with the fast flood fill;
+  // the Photo step then shows the result with "Hiq sfondin" / "Rikthe origjinalin" (and the AI for busy backgrounds).
+  async function usePhoto(blob, orig) {
+    const im = await blobToImg(blob)
+    photoRef.current = { blob, orig: orig || null, dirty: true }; setImg(im)
+  }
+  async function onPhoto(e) {
+    const f = e.target.files?.[0]; if (!f) return
+    e.target.value = ''
+    try {
+      const b = await prepPhoto(f)
+      setBg({ removed: false, smooth: false, busy: 'flood', progress: 0 })
+      let cut = null, a = { smooth: false, alpha: false }
+      try { a = await canFlood(b); if (a.smooth) cut = await floodRemove(b) } catch (err) { console.error(err) }
+      await usePhoto(cut || b, cut ? b : null)
+      setBg({ removed: Boolean(cut) || a.alpha, smooth: a.smooth, busy: '', progress: 0 })
+      setTab('foto'); setPhotoMissing(false)
+      if (cut) say('Sfondi u hoq automatikisht')
+    } catch { setBg((s) => ({ ...s, busy: '' })); say('Fotoja nuk u lexua – provo një tjetër') }
+  }
+  // on = remove the background (fast flood fill, or the AI for busy backgrounds / when ai = true); off = original
+  async function setBgRemoved(on, ai = false) {
+    const cur = photoRef.current; if (!cur.blob || bg.busy) return
+    if (!on) { if (cur.orig) { await usePhoto(cur.orig, null); setBg((s) => ({ ...s, removed: false })) } return }
+    const src = cur.orig || cur.blob
+    setBg((s) => ({ ...s, busy: ai ? 'ai' : 'flood', progress: 0 }))
+    try {
+      let out = null
+      if (!ai) out = await floodRemove(src, { force: true })
+      if (!out) { ai = true; setBg((s) => ({ ...s, busy: 'ai' })); out = await aiRemove(src, (v) => setBg((s) => ({ ...s, progress: v }))) }
+      await usePhoto(out, src); setBg((s) => ({ ...s, removed: true, busy: '' }))
+      say(ai ? 'Sfondi u hoq (AI)' : 'Sfondi u hoq')
+    } catch (err) { console.error(err); setBg((s) => ({ ...s, busy: '' })); say('Heqja e sfondit dështoi – provo përsëri') }
+  }
 
   async function makeBlob() { const c = document.createElement('canvas'); await fontsReady(); renderTo(c, tpl, type, th, data, 1); return new Promise((res) => c.toBlob(res, 'image/png')) }
   const fileName = () => `nmobile-${(model || 'postim').replace(/[^\w-]+/g, '-').toLowerCase()}-${type}.png`
@@ -185,5 +333,5 @@ export default function useEditor(user) {
   const next = TABS[idx + 1]
   const preview = img && !['foto', 'template'].includes(tab)
 
-  return { x, setX, setXAll, img2, contact, setContact, specF, setSpecField, code, setCode, region, setRegion, noActive, setNoActive, draftId, draftState, saveDraft, newPost, caption, captionEdited, copyCaption, cta, data, download, fileName, idx, ig, igBusy, igLink, img, info, localPosts, logoImg, logoUrl, makeBlob, model, next, offer, onPhoto, posts, postsBusy, preview, price, publishDirect, ready, refreshPosts, remember, removePost, reuse, saveT, say, setCaption, setCaptionEdited, setCta, setIg, setIgBusy, setIgLink, setImg, setInfo, setLogoImg, setLogoUrl, setModel, setOffer, setPosts, setPostsBusy, setPrice, setReady, setSettings, setSpec, setSynced, setTab, setTheme, setToast, setTpl, setType, setVariant, settings, share, spec, synced, tab, th, theme, toast, tpl, type, user, variant }
+  return { bg, setBgRemoved, photoBlob: () => photoRef.current, photoMissing, opening, igUrlFor, x, setX, setXAll, img2, contact, setContact, specF, setSpecField, code, setCode, region, setRegion, noActive, setNoActive, draftId, draftState, saveDraft, newPost, caption, captionEdited, copyCaption, cta, data, download, fileName, idx, ig, igBusy, igLink, img, info, localPosts, logoImg, logoUrl, makeBlob, model, next, offer, onPhoto, posts, postsBusy, preview, price, publishDirect, ready, refreshPosts, remember, removePost, reuse, saveT, say, setCaption, setCaptionEdited, setCta, setIg, setIgBusy, setIgLink, setImg, setInfo, setLogoImg, setLogoUrl, setModel, setOffer, setPosts, setPostsBusy, setPrice, setReady, setSettings, setSpec, setSynced, setTab, setTheme, setToast, setTpl, setType, setVariant, settings, share, spec, synced, tab, th, theme, toast, tpl, type, user, variant }
 }

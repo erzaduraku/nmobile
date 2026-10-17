@@ -24,7 +24,8 @@ export default defineConfig({
           { src: 'icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
         ]
       },
-      workbox: { globPatterns: ['**/*.{js,css,html,svg,png,woff,woff2}'] }
+      // the AI background-removal runtime (onnxruntime, lazy-loaded) is not precached for offline use
+      workbox: { globPatterns: ['**/*.{js,css,html,svg,png,woff,woff2}'], globIgnores: ['**/ort*', '**/*.wasm'] }
     })
   ]
 })

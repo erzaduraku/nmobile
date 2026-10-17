@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, ChevronRight, X } from 'lucide-react'
+import { ArrowLeft, ChevronRight, X, Maximize2 } from 'lucide-react'
 import Logo from '../components/ui/Logo.jsx'
 import PostCanvas from '../components/ui/PostCanvas.jsx'
+import ImageLightbox from '../components/ui/ImageLightbox.jsx'
 import { TEMPLATES } from '../features/templates/index.js'
 import useEditor from '../hooks/useEditor.jsx'
 import { TABS as STEPS, NAV } from './tabs.js'
@@ -21,12 +22,22 @@ const STEP_VIEW = { foto: PhotoTab, template: TemplateTab, tema: ThemeTab, detaj
 export default function Editor({ user }) {
   const base = useEditor(user)
   const [screen, setScreen] = useState('home')
-  const { tab, setTab, img, type, tpl, th, data, ready, preview, logoUrl, toast, onPhoto, reuse, refreshPosts } = base
-  const ed = { ...base, reuse: (p) => { reuse(p); setScreen('editor') } }
+  const [zoom, setZoom] = useState(null) // { src } kur pamja e madhe është hapur; src null = duke u gatuar
+  const { tab, setTab, img, type, tpl, th, data, ready, preview, logoUrl, toast, onPhoto, reuse, refreshPosts, makeBlob } = base
+  // Photos are loaded before the editor opens, so it never shows a half-restored draft
+  const ed = { ...base, reuse: async (p) => { await reuse(p); setScreen('editor') } }
   useEffect(() => { if (screen !== 'editor') refreshPosts() }, [screen])
   useEffect(() => { if (new URLSearchParams(location.search).has('code')) setScreen('settings') }, [])
 
   const i = STEPS.findIndex((s) => s.id === tab), step = STEPS[i], next = STEPS[i + 1]
+  // Pamja e madhe: render në madhësi të plotë (1080×1350 / 1080×1920) që teksti të jetë i qartë.
+  const openZoom = async () => {
+    setZoom({ src: null })
+    const b = await makeBlob()
+    const url = URL.createObjectURL(b)
+    setZoom((z) => (z ? { src: url } : (URL.revokeObjectURL(url), z))) // u mbyll ndërkohë
+  }
+  const closeZoom = () => setZoom((z) => { if (z?.src) URL.revokeObjectURL(z.src); return null })
   const back = () => (i > 0 ? setTab(STEPS[i - 1].id) : setScreen('home'))
   const startNew = async (e) => { base.newPost(); await onPhoto(e); setScreen('editor') }
   const Toast = toast && <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-40 bg-neutral-900 text-white px-5 py-3 rounded-full shadow-xl text-center max-w-[90vw] text-sm">{toast}</div>
@@ -47,9 +58,10 @@ export default function Editor({ user }) {
         </header>
         {preview && (
           <div className="sticky top-[97px] z-10 bg-neutral-50 border-b border-neutral-100 py-3">
-            <div className="mx-auto rounded-xl overflow-hidden shadow-lg" style={{ width: type === 'story' ? 'calc(30vh * 0.5625)' : 'calc(30vh * 0.8)', maxWidth: '80%' }}>
+            <button type="button" onClick={openZoom} aria-label="Shiko të madhe" className="relative block mx-auto rounded-xl overflow-hidden shadow-lg" style={{ width: type === 'story' ? 'calc(30vh * 0.5625)' : 'calc(30vh * 0.8)', maxWidth: '80%' }}>
               <PostCanvas tpl={tpl} type={type} theme={th} data={data} scale={0.4} ready={ready} />
-            </div>
+              <span className="absolute bottom-1.5 right-1.5 w-7 h-7 rounded-full bg-black/55 text-white grid place-items-center"><Maximize2 size={14} /></span>
+            </button>
             <p className="text-center text-xs text-neutral-500 mt-2">{TEMPLATES.find((t) => t.id === tpl).name} · {th.name} · {type === 'post' ? 'Post' : 'Story'}</p>
           </div>
         )}
@@ -59,6 +71,7 @@ export default function Editor({ user }) {
             <div className="max-w-lg mx-auto"><button className="btn-red flex items-center justify-center gap-2" onClick={() => setTab(next.id)}>Vazhdo: {next.name} <ChevronRight size={22} /></button></div>
           </div>
         )}
+        {zoom && <ImageLightbox src={zoom.src} alt="Pamja e postimit" onClose={closeZoom} />}
         {Toast}
       </div>
     )

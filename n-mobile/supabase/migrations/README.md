@@ -18,3 +18,7 @@ Run each file once, in order, in the Supabase dashboard: **SQL Editor → New qu
 - `003_instagram.sql` – per-user Instagram accounts (token hidden from clients) + `ig-temp` bucket.
 - `004_drafts.sql` – drafts (`status` draft/posted, `photo_path`, `updated_at`) and device fields (`model_code`, `region`, `no_active`).
 - `005_extra_fields.sql` – `posts.extra` (jsonb with optional fields) and `shop_settings.whatsapp` / `instagram`.
+- `006_instagram_permalink.sql` – `posts.ig_media_id` and `posts.ig_permalink` (link to the published Instagram post, for "Hape në Instagram") (applied).
+- `007_post_photos.sql` – `posts.photo2_path` (second product photo stored as a file in the `posts` bucket instead of a dataURL in `extra`) (applied).
+- `008_exported_status.sql` – new `posts.status` value `exported` (downloaded/shared only); old 'posted' rows without Instagram id/link become 'exported' (applied).
+- `009_photo_original.sql` – `posts.photo_orig_path` (original upload kept while the background is removed, for undo) (applied).

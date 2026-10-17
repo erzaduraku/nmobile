@@ -3,7 +3,9 @@ export const LS = {
   get: (k, d = '') => { try { return localStorage.getItem('nm_' + k) ?? d } catch { return d } },
   set: (k, v) => { try { v ? localStorage.setItem('nm_' + k, v) : localStorage.removeItem('nm_' + k) } catch (e) {} },
 }
-export const loadImg = (src) => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src })
+// Remote (http) images are requested with CORS so drawing them never taints a canvas
+// (a tainted canvas breaks getImageData/toBlob, i.e. preview, export and saving).
+export const loadImg = (src) => new Promise((res, rej) => { const i = new Image(); if (/^https?:/i.test(src)) i.crossOrigin = 'anonymous'; i.onload = () => res(i); i.onerror = rej; i.src = src })
 export const readFile = (f) => new Promise((res) => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(f) })
 // Downscales an image (used for the custom logo kept in localStorage / DB)
 export async function shrink(dataUrl, max = 600) {

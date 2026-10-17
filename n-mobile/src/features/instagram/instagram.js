@@ -28,3 +28,10 @@ export async function publishToInstagram(jpegDataUrl, caption, type) {
   if (error || data?.error) throw new Error(data?.error || error.message)
   return data
 }
+// Gjen linqet e postimeve të publikuara (serveri përdor tokenin; shfletuesi merr vetëm linqet)
+export async function findPermalinks(items) {
+  const { data, error } = await supabase.functions.invoke('instagram-permalink', { body: { items } })
+  if (error || data?.error) throw new Error(data?.error || error.message)
+  return data
+}
+export const igProfileUrl = (u) => { u = String(u || '').trim(); if (/^https?:\/\//.test(u)) return u; u = u.replace(/^@/, ''); return u ? `https://www.instagram.com/${u}/` : '' }
