@@ -1,0 +1,2 @@
+import { Smartphone, TreePine, Sparkles, Tag, Heart, Sun, Flower2, Leaf, Snowflake, Flower, Moon, Star, Flag, GraduationCap } from 'lucide-react'
+export const THEME_ICON = { standard: Smartphone, pranvere: Flower2, vere: Sun, vjeshte: Leaf, dimer: Snowflake, krishtlindje: TreePine, vitiri: Sparkles, blackfriday: Tag, valentin: Heart, marsi8: Flower, bajram: Moon, pavaresia: Star, flamuri: Flag, shkolla: GraduationCap }

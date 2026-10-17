@@ -1,0 +1,86 @@
+import { useEffect, useState } from 'react'
+import { ArrowLeft, ChevronRight, X } from 'lucide-react'
+import Logo from '../components/ui/Logo.jsx'
+import PostCanvas from '../components/ui/PostCanvas.jsx'
+import { TEMPLATES } from '../features/templates/index.js'
+import useEditor from '../hooks/useEditor.jsx'
+import { TABS as STEPS, NAV } from './tabs.js'
+import PhotoTab from '../features/editor/PhotoTab.jsx'
+import TemplateTab from '../features/editor/TemplateTab.jsx'
+import ThemeTab from '../features/themes/ThemeTab.jsx'
+import DetailsTab from '../features/editor/DetailsTab.jsx'
+import PublishTab from '../features/editor/PublishTab.jsx'
+import PostsTab from '../features/posts/PostsTab.jsx'
+import HomePage from '../features/posts/HomePage.jsx'
+import SettingsPage from '../features/settings/SettingsPage.jsx'
+
+const STEP_VIEW = { foto: PhotoTab, template: TemplateTab, tema: ThemeTab, detajet: DetailsTab, posto: PublishTab }
+
+// App shell. Outside the editor: bottom nav (Kryefaqja / Postimet / Cilësime).
+// Inside the editor: step header with back + progress, live preview, sticky "Vazhdo" action.
+export default function Editor({ user }) {
+  const base = useEditor(user)
+  const [screen, setScreen] = useState('home')
+  const { tab, setTab, img, type, tpl, th, data, ready, preview, logoUrl, toast, onPhoto, reuse, refreshPosts } = base
+  const ed = { ...base, reuse: (p) => { reuse(p); setScreen('editor') } }
+  useEffect(() => { if (screen !== 'editor') refreshPosts() }, [screen])
+  useEffect(() => { if (new URLSearchParams(location.search).has('code')) setScreen('settings') }, [])
+
+  const i = STEPS.findIndex((s) => s.id === tab), step = STEPS[i], next = STEPS[i + 1]
+  const back = () => (i > 0 ? setTab(STEPS[i - 1].id) : setScreen('home'))
+  const startNew = async (e) => { base.newPost(); await onPhoto(e); setScreen('editor') }
+  const Toast = toast && <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-40 bg-neutral-900 text-white px-5 py-3 rounded-full shadow-xl text-center max-w-[90vw] text-sm">{toast}</div>
+
+  if (screen === 'editor') {
+    const View = STEP_VIEW[tab] || PhotoTab
+    return (
+      <div className="min-h-full max-w-lg mx-auto flex flex-col">
+        <header className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-neutral-100 px-3 pt-3 pb-2">
+          <div className="flex items-center gap-2">
+            <button onClick={back} className="w-11 h-11 rounded-full bg-neutral-100 grid place-items-center" aria-label="Kthehu"><ArrowLeft size={22} /></button>
+            <div className="flex-1 text-center"><div className="text-xs text-neutral-500 font-semibold">Hapi {i + 1} nga {STEPS.length}</div><div className="font-extrabold text-lg leading-tight">{step.name}</div></div>
+            <button onClick={() => setScreen('home')} className="w-11 h-11 rounded-full bg-neutral-100 grid place-items-center" aria-label="Mbyll"><X size={22} /></button>
+          </div>
+          <div className="flex gap-1.5 mt-3">
+            {STEPS.map((s, k) => <button key={s.id} disabled={!img} onClick={() => setTab(s.id)} className={`h-1.5 flex-1 rounded-full ${k <= i ? 'bg-brand' : 'bg-neutral-200'}`} aria-label={s.name} />)}
+          </div>
+        </header>
+        {preview && (
+          <div className="sticky top-[97px] z-10 bg-neutral-50 border-b border-neutral-100 py-3">
+            <div className="mx-auto rounded-xl overflow-hidden shadow-lg" style={{ width: type === 'story' ? 'calc(30vh * 0.5625)' : 'calc(30vh * 0.8)', maxWidth: '80%' }}>
+              <PostCanvas tpl={tpl} type={type} theme={th} data={data} scale={0.4} ready={ready} />
+            </div>
+            <p className="text-center text-xs text-neutral-500 mt-2">{TEMPLATES.find((t) => t.id === tpl).name} · {th.name} · {type === 'post' ? 'Post' : 'Story'}</p>
+          </div>
+        )}
+        <main className="flex-1 p-4 pb-28"><View ed={ed} /></main>
+        {next && img && (
+          <div className="fixed bottom-0 inset-x-0 z-20 bg-white/95 backdrop-blur border-t border-neutral-100 p-3" style={{ paddingBottom: 'calc(12px + env(safe-area-inset-bottom))' }}>
+            <div className="max-w-lg mx-auto"><button className="btn-red flex items-center justify-center gap-2" onClick={() => setTab(next.id)}>Vazhdo: {next.name} <ChevronRight size={22} /></button></div>
+          </div>
+        )}
+        {Toast}
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-full max-w-lg mx-auto flex flex-col pb-24">
+      <header className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-neutral-100 px-4 py-3 flex justify-center"><Logo size={32} custom={logoUrl} /></header>
+      <main className="flex-1 p-4">
+        {screen === 'home' && <HomePage ed={ed} onPhoto={startNew} openPosts={() => setScreen('posts')} openEditor={() => setScreen('editor')} openSettings={() => setScreen('settings')} />}
+        {screen === 'posts' && <PostsTab ed={ed} />}
+        {screen === 'settings' && <SettingsPage ed={ed} />}
+      </main>
+      <nav className="fixed bottom-0 inset-x-0 z-20 bg-white border-t border-neutral-200" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div className="max-w-lg mx-auto grid grid-cols-3">
+          {NAV.map((n) => { const on = screen === n.id; return (
+            <button key={n.id} onClick={() => setScreen(n.id)} className={`py-2.5 flex flex-col items-center gap-1 text-xs font-semibold ${on ? 'text-brand' : 'text-neutral-500'}`}>
+              <span className={`rounded-full px-5 py-1 ${on ? 'bg-brand-soft' : ''}`}><n.icon size={22} /></span>{n.name}
+            </button>) })}
+        </div>
+      </nav>
+      {Toast}
+    </div>
+  )
+}

@@ -1,0 +1,30 @@
+import { supabase } from '../../lib/supabase.js'
+export const IG_APP_ID = import.meta.env.VITE_INSTAGRAM_APP_ID
+export const IG_REDIRECT = import.meta.env.VITE_INSTAGRAM_REDIRECT_URI || (typeof location !== 'undefined' ? location.origin + '/' : '')
+export const igReady = Boolean(IG_APP_ID)
+
+export function startInstagramLogin() {
+  const state = crypto.randomUUID(); sessionStorage.setItem('nm_ig_state', state)
+  const q = new URLSearchParams({ client_id: IG_APP_ID, redirect_uri: IG_REDIRECT, response_type: 'code', scope: 'instagram_business_basic,instagram_business_content_publish', state })
+  location.href = 'https://www.instagram.com/oauth/authorize?' + q
+}
+// Thirret në hapje: nëse URL ka ?code nga Instagrami, e përfundon lidhjen
+export async function finishInstagramLogin() {
+  const u = new URL(location.href), code = u.searchParams.get('code'), state = u.searchParams.get('state')
+  if (!code) return null
+  history.replaceState(null, '', u.pathname)
+  if (state !== sessionStorage.getItem('nm_ig_state')) throw new Error('Lidhja e Instagramit u anulua (state i pavlefshëm)')
+  const { data, error } = await supabase.functions.invoke('instagram-oauth', { body: { code } })
+  if (error || data?.error) throw new Error(data?.error || error.message)
+  return data
+}
+export async function getInstagramAccount() {
+  const { data } = await supabase.from('instagram_accounts').select('username, ig_user_id, token_expires_at').maybeSingle()
+  return data
+}
+export async function disconnectInstagram(uid) { await supabase.from('instagram_accounts').delete().eq('user_id', uid) }
+export async function publishToInstagram(jpegDataUrl, caption, type) {
+  const { data, error } = await supabase.functions.invoke('instagram-publish', { body: { image: jpegDataUrl, caption, type } })
+  if (error || data?.error) throw new Error(data?.error || error.message)
+  return data
+}

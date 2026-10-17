@@ -1,0 +1,505 @@
+[
+ {
+  "gold": "#D4AF37",
+  "light": "#FFFFFF",
+  "soft": "#F4F1EE",
+  "display": "Montserrat",
+  "serif": "Playfair Display",
+  "id": "standard",
+  "group": "standard",
+  "name": "Standard",
+  "desc": "Pamja klasike e kuqe, për çdo ditë",
+  "accent": "#E10600",
+  "accent2": "#FFB800",
+  "dark": "#111114",
+  "badge": "Ofertë speciale",
+  "deco": null,
+  "head": {
+   "f": "Barlow Condensed",
+   "w": 800,
+   "s": "italic"
+  },
+  "titles": [
+   "E re në N Mobile!",
+   "Gati për ty në N Mobile!",
+   "Telefoni që po prisje!",
+   "Mos e humb këtë rast!"
+  ],
+  "tags": [
+   "#ofertë"
+  ],
+  "when": null
+ },
+ {
+  "gold": "#D4AF37",
+  "light": "#FFFFFF",
+  "soft": "#F4F1EE",
+  "display": "Montserrat",
+  "serif": "Playfair Display",
+  "id": "pranvere",
+  "group": "stinet",
+  "name": "Pranverë",
+  "desc": "Lule dhe ngjyra të freskëta",
+  "accent": "#2E9E5B",
+  "accent2": "#F7A1C4",
+  "dark": "#123524",
+  "badge": "Ofertë Pranvere",
+  "deco": "blossom",
+  "head": {
+   "f": "Barlow Condensed",
+   "w": 800,
+   "s": "italic"
+  },
+  "titles": [
+   "Pranvera erdhi në N Mobile!",
+   "Telefon i ri për pranverën!",
+   "Fillim i freskët me N Mobile!"
+  ],
+  "tags": [
+   "#pranvera",
+   "#ofertë"
+  ],
+  "when": null
+ },
+ {
+  "gold": "#FFC94A",
+  "light": "#FFFFFF",
+  "soft": "#FFF5DE",
+  "display": "Montserrat",
+  "serif": "Playfair Display",
+  "id": "vere",
+  "group": "stinet",
+  "name": "Verë",
+  "desc": "Diell dhe ngjyra të ngrohta",
+  "accent": "#FF6B35",
+  "accent2": "#00B4D8",
+  "dark": "#023047",
+  "badge": "Ofertë Vere",
+  "deco": "sun",
+  "head": {
+   "f": "Barlow Condensed",
+   "w": 800,
+   "s": "italic"
+  },
+  "titles": [
+   "Ofertë Vere në N Mobile!",
+   "Vera është më e bukur me telefon të ri!",
+   "Çmime të nxehta këtë verë!"
+  ],
+  "tags": [
+   "#verë",
+   "#summer",
+   "#ofertë"
+  ],
+  "when": null
+ },
+ {
+  "gold": "#D4AF37",
+  "light": "#FFFFFF",
+  "soft": "#F4F1EE",
+  "display": "Montserrat",
+  "serif": "Playfair Display",
+  "id": "vjeshte",
+  "group": "stinet",
+  "name": "Vjeshtë",
+  "desc": "Gjethe në portokalli dhe kafe",
+  "accent": "#C2491D",
+  "accent2": "#E8A33D",
+  "dark": "#2B1408",
+  "badge": "Ofertë Vjeshte",
+  "deco": "leaves",
+  "head": {
+   "f": "Barlow Condensed",
+   "w": 800,
+   "s": "italic"
+  },
+  "titles": [
+   "Vjeshta sjell oferta në N Mobile!",
+   "Ngrohu me një telefon të ri!",
+   "Oferta të vjeshtës, vetëm për pak ditë!"
+  ],
+  "tags": [
+   "#vjeshta",
+   "#ofertë"
+  ],
+  "when": null
+ },
+ {
+  "gold": "#D4AF37",
+  "light": "#FFFFFF",
+  "soft": "#F4F1EE",
+  "display": "Montserrat",
+  "serif": "Playfair Display",
+  "id": "dimer",
+  "group": "stinet",
+  "name": "Dimër",
+  "desc": "Blu e ftohtë dhe flokë dëbore",
+  "accent": "#1E6FB8",
+  "accent2": "#BFE3FF",
+  "dark": "#0B1E33",
+  "badge": "Ofertë Dimri",
+  "deco": "snow",
+  "head": {
+   "f": "Barlow Condensed",
+   "w": 800,
+   "s": "italic"
+  },
+  "titles": [
+   "Oferta dimri në N Mobile!",
+   "Dimër i ngrohtë me telefon të ri!",
+   "Çmime që shkrijnë akullin!"
+  ],
+  "tags": [
+   "#dimri",
+   "#ofertë"
+  ],
+  "when": null
+ },
+ {
+  "gold": "#E8C268",
+  "light": "#FFFFFF",
+  "soft": "#F7F0E6",
+  "display": "Playfair Display",
+  "serif": "Playfair Display",
+  "id": "krishtlindje",
+  "group": "festat",
+  "name": "Krishtlindje",
+  "desc": "Dëborë, të kuqe dhe jeshile",
+  "accent": "#C8102E",
+  "accent2": "#1F7A45",
+  "dark": "#0C2A1C",
+  "badge": "Ofertë Krishtlindjesh",
+  "deco": "snow",
+  "head": {
+   "f": "Playfair Display",
+   "w": 700,
+   "s": ""
+  },
+  "titles": [
+   "Ofertë Krishtlindjesh në N Mobile!",
+   "Dhurata perfekte për Krishtlindje!",
+   "Gëzuar Krishtlindjet nga N Mobile!"
+  ],
+  "tags": [
+   "#krishtlindje",
+   "#dhurata",
+   "#ofertëkrishtlindjesh"
+  ],
+  "when": {
+   "fixed": [
+    12,
+    25
+   ],
+   "lead": 24
+  }
+ },
+ {
+  "gold": "#E3B23C",
+  "light": "#FFFFFF",
+  "soft": "#EEF0F8",
+  "display": "Montserrat",
+  "serif": "Playfair Display",
+  "id": "vitiri",
+  "group": "festat",
+  "name": "Viti i Ri",
+  "desc": "Yje dhe konfete të arta",
+  "accent": "#E3B23C",
+  "accent2": "#C9CED6",
+  "dark": "#0A1030",
+  "badge": "Ofertë e Vitit të Ri",
+  "deco": "stars",
+  "head": {
+   "f": "Montserrat",
+   "w": 900,
+   "s": ""
+  },
+  "titles": [
+   "Fillo vitin e ri me telefon të ri!",
+   "Ofertë e Vitit të Ri në N Mobile!",
+   "Gëzuar Vitin e Ri! Surprizë nga N Mobile!"
+  ],
+  "tags": [
+   "#vitiri",
+   "#gezuarvitinere",
+   "#ofertë"
+  ],
+  "when": {
+   "fixed": [
+    12,
+    31
+   ],
+   "lead": 5,
+   "after": 6
+  }
+ },
+ {
+  "gold": "#FFE600",
+  "light": "#FFFFFF",
+  "soft": "#EDEDED",
+  "display": "Bebas Neue",
+  "serif": "Bebas Neue",
+  "id": "blackfriday",
+  "group": "festat",
+  "name": "Black Friday",
+  "desc": "E zezë me shirita të verdhë",
+  "accent": "#FF1E1E",
+  "accent2": "#FFE600",
+  "dark": "#000000",
+  "badge": "BLACK FRIDAY",
+  "deco": "tape",
+  "head": {
+   "f": "Bebas Neue",
+   "w": 400,
+   "s": ""
+  },
+  "titles": [
+   "BLACK FRIDAY në N Mobile!",
+   "Çmime të çmendura këtë Black Friday!",
+   "Black Friday: vetëm për pak ditë!"
+  ],
+  "tags": [
+   "#blackfriday",
+   "#zbritje",
+   "#ofertë"
+  ],
+  "when": {
+   "rule": "blackfriday",
+   "lead": 10,
+   "after": 3
+  }
+ },
+ {
+  "gold": "#F4B6C2",
+  "light": "#FFFFFF",
+  "soft": "#FFF0F4",
+  "display": "Playfair Display",
+  "serif": "Playfair Display",
+  "id": "valentin",
+  "group": "festat",
+  "name": "Dita e Dashurisë",
+  "desc": "Zemra dhe ngjyra rozë",
+  "accent": "#E0245E",
+  "accent2": "#FF9CB8",
+  "dark": "#3A0A1C",
+  "badge": "Dita e Dashurisë",
+  "deco": "hearts",
+  "head": {
+   "f": "Playfair Display",
+   "w": 700,
+   "s": "italic"
+  },
+  "titles": [
+   "Dhuratë për personin që do!",
+   "Ofertë për Ditën e Dashurisë!",
+   "Befasoje me një telefon të ri!"
+  ],
+  "tags": [
+   "#ditaedashurise",
+   "#valentinesday",
+   "#dhurata"
+  ],
+  "when": {
+   "fixed": [
+    2,
+    14
+   ],
+   "lead": 10
+  }
+ },
+ {
+  "gold": "#D4AF37",
+  "light": "#FFFFFF",
+  "soft": "#F4F1EE",
+  "display": "Montserrat",
+  "serif": "Playfair Display",
+  "id": "marsi8",
+  "group": "festat",
+  "name": "8 Marsi",
+  "desc": "Lule rozë për Ditën e Grave",
+  "accent": "#D6336C",
+  "accent2": "#F9C6D6",
+  "dark": "#3D0A22",
+  "badge": "Gëzuar 8 Marsin",
+  "deco": "flowers",
+  "head": {
+   "f": "Playfair Display",
+   "w": 700,
+   "s": "italic"
+  },
+  "titles": [
+   "Gëzuar 8 Marsin nga N Mobile!",
+   "Dhurata më e bukur për të!",
+   "Për gratë që na frymëzojnë!"
+  ],
+  "tags": [
+   "#8marsi",
+   "#ditaegruas",
+   "#dhurata"
+  ],
+  "when": {
+   "fixed": [
+    3,
+    8
+   ],
+   "lead": 8
+  }
+ },
+ {
+  "gold": "#D4AF37",
+  "light": "#FFFFFF",
+  "soft": "#F4F1EE",
+  "display": "Montserrat",
+  "serif": "Playfair Display",
+  "id": "bajram",
+  "group": "festat",
+  "name": "Bajram",
+  "desc": "Jeshile e errët, ar dhe hënë e re",
+  "accent": "#0F5132",
+  "accent2": "#D4AF37",
+  "dark": "#062A1A",
+  "badge": "Bajram Mubarak",
+  "deco": "crescent",
+  "head": {
+   "f": "Playfair Display",
+   "w": 700,
+   "s": ""
+  },
+  "titles": [
+   "Bajram Mubarak nga N Mobile!",
+   "Gëzuar Bajramin! Oferta festive në N Mobile!",
+   "Festo Bajramin me telefon të ri!"
+  ],
+  "tags": [
+   "#bajram",
+   "#bajrammubarak",
+   "#festa"
+  ],
+  "when": {
+   "dates": [
+    "2026-03-20",
+    "2026-05-27",
+    "2027-03-10",
+    "2027-05-17",
+    "2028-02-27",
+    "2028-05-05"
+   ],
+   "lead": 7,
+   "after": 2
+  }
+ },
+ {
+  "gold": "#D4AF37",
+  "light": "#FFFFFF",
+  "soft": "#F4F1EE",
+  "display": "Montserrat",
+  "serif": "Playfair Display",
+  "id": "pavaresia",
+  "group": "festat",
+  "name": "17 Shkurti",
+  "desc": "Blu, ar dhe gjashtë yje",
+  "accent": "#244AA5",
+  "accent2": "#D4AF37",
+  "dark": "#0E1C45",
+  "badge": "Gëzuar Pavarësinë",
+  "deco": "sixstars",
+  "head": {
+   "f": "Montserrat",
+   "w": 900,
+   "s": ""
+  },
+  "titles": [
+   "Gëzuar Pavarësinë, Kosovë!",
+   "17 Shkurti: festo me N Mobile!",
+   "Gëzuar Ditën e Pavarësisë!"
+  ],
+  "tags": [
+   "#17shkurti",
+   "#pavaresia",
+   "#kosova"
+  ],
+  "when": {
+   "fixed": [
+    2,
+    17
+   ],
+   "lead": 3
+  }
+ },
+ {
+  "gold": "#D4AF37",
+  "light": "#FFFFFF",
+  "soft": "#F4F1EE",
+  "display": "Montserrat",
+  "serif": "Playfair Display",
+  "id": "flamuri",
+  "group": "festat",
+  "name": "28 Nëntori",
+  "desc": "E kuqe, e zezë dhe shqiponja",
+  "accent": "#E11D2E",
+  "accent2": "#111111",
+  "dark": "#000000",
+  "badge": "Gëzuar Ditën e Flamurit",
+  "deco": "eagle",
+  "head": {
+   "f": "Montserrat",
+   "w": 900,
+   "s": ""
+  },
+  "titles": [
+   "Gëzuar Ditën e Flamurit!",
+   "28 Nëntori: krenarë që jemi shqiptarë!",
+   "Festo 28 Nëntorin me N Mobile!"
+  ],
+  "tags": [
+   "#28nentori",
+   "#ditaeflamurit",
+   "#shqiperia"
+  ],
+  "when": {
+   "fixed": [
+    11,
+    28
+   ],
+   "lead": 10
+  }
+ },
+ {
+  "gold": "#D4AF37",
+  "light": "#FFFFFF",
+  "soft": "#F4F1EE",
+  "display": "Montserrat",
+  "serif": "Playfair Display",
+  "id": "shkolla",
+  "group": "festat",
+  "name": "Rikthimi në shkollë",
+  "desc": "E verdhë, blu dhe lapsa",
+  "accent": "#F2A900",
+  "accent2": "#1E6FB8",
+  "dark": "#1B2A4A",
+  "badge": "Rikthimi në shkollë",
+  "deco": "school",
+  "head": {
+   "f": "Barlow Condensed",
+   "w": 800,
+   "s": "italic"
+  },
+  "titles": [
+   "Gati për shkollë me N Mobile!",
+   "Viti i ri shkollor, telefon i ri!",
+   "Oferta për nxënës dhe studentë!"
+  ],
+  "tags": [
+   "#shkolla",
+   "#backtoschool",
+   "#studentet"
+  ],
+  "when": {
+   "fixed": [
+    9,
+    1
+   ],
+   "lead": 20,
+   "after": 10
+  }
+ }
+]
