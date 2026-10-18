@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { renderTo, fontsReady } from '../features/templates/index.js'
 import { themeById } from '../features/themes/themes.js'
-import { makeCaption } from '../features/editor/caption.js'
+import { makeCaption, DEFAULT_CAPTION_OPTS, IG_MAX_CHARS, IG_MAX_TAGS, countTags } from '../features/editor/caption.js'
 import { loadSettings, saveSettings } from '../features/settings/settingsApi.js'
 import { savePost, listPosts, deletePost, postStatus } from '../features/posts/postsApi.js'
 import { mergeIgFeed } from '../features/posts/igFeed.js'
@@ -18,6 +18,8 @@ export default function useEditor(user) {
   const [ready, setReady] = useState(false)
   const [tab, setTab] = useState('foto')
   const [img, setImg] = useState(null)
+  // original (uncut) photo, used by the full-bleed 'Mbi foto' templates when the background was removed
+  const [imgOrig, setImgOrig] = useState(null)
   const [type, setType] = useState('post')
   const [tpl, setTpl] = useState('hero')
   const [theme, setTheme] = useState(LS.get('theme', 'standard'))
@@ -62,6 +64,9 @@ export default function useEditor(user) {
   const [variant, setVariant] = useState(0)
   const [caption, setCaption] = useState('')
   const [captionEdited, setCaptionEdited] = useState(false)
+  // Caption style + toggles (last choice remembered on this device, and saved with each post in extra.caption_opts)
+  const [capOpts, setCapOptsState] = useState(() => { try { return { ...DEFAULT_CAPTION_OPTS, ...JSON.parse(LS.get('capopts', '{}')) } } catch { return DEFAULT_CAPTION_OPTS } })
+  const setCapOpts = (patch) => setCapOptsState((o) => { const n = { ...o, ...patch }; LS.set('capopts', JSON.stringify(n)); return n })
   const [settings, setSettings] = useState(false)
   const [toast, setToast] = useState('')
   const [synced, setSynced] = useState(!user)
@@ -73,13 +78,34 @@ export default function useEditor(user) {
     if (!user) return
     finishInstagramLogin().then((r) => { if (r) say('Instagrami u lidh: @' + r.username) }).catch((e) => say(e.message)).finally(() => getInstagramAccount().then(setIg).catch(() => {}))
   }, [user])
-  async function publishDirect() {
+  // The design currently open is already on Instagram: { id (post row), ig_media_id, permalink } or null.
+  // Set after a successful direct publish and when a posted row is reopened; cleared by real edits / a new post.
+  // While set, the final step shows "Postuar në Instagram" instead of the publish button (no double posting).
+  const [published, setPublishedState] = useState(null)
+  const publishedRef = useRef(null)
+  const setPublished = (v) => { publishedRef.current = v; setPublishedState(v) }
+  async function publishDirect(again = false) {
+    if (igBusy || (publishedRef.current && !again)) return
+    if (caption.length > IG_MAX_CHARS) { say(`Caption-i është shumë i gjatë (${caption.length}/${IG_MAX_CHARS} shkronja)`); return }
+    if (countTags(caption) > IG_MAX_TAGS) { say(`Shumë hashtag (${countTags(caption)}/${IG_MAX_TAGS}) – Instagrami lejon deri në 30`); return }
     setIgBusy(true); setIgLink('')
     try {
       const c = document.createElement('canvas'); await fontsReady(); renderTo(c, tpl, type, th, data, 1)
       const jpg = c.toDataURL('image/jpeg', 0.92)
       const r = await publishToInstagram(jpg, caption, type)
-      setIgLink(r.permalink || ''); say('U postua në Instagram'); c.toBlob((b) => b && remember(b, { ig_media_id: r.id || null, ig_permalink: r.permalink || null }), 'image/png')
+      if (!r?.id) throw new Error('Instagrami nuk ktheu ID të postimit')
+      const igx = { ig_media_id: String(r.id), ig_permalink: r.permalink || null }
+      // posting again = a new post row (the previous one stays as it is)
+      if (again) { idRef.current = null; pathsRef.current = {}; photoRef.current.dirty = Boolean(photoRef.current.blob); photo2Saved.current = '' }
+      if (!idRef.current) idRef.current = newId()
+      const rowId = idRef.current, now = new Date().toISOString()
+      setPublished({ id: rowId, ...igx, permalink: igx.ig_permalink }); setIgLink(igx.ig_permalink || ''); say('U postua në Instagram')
+      // show it under "Të postuarat" right away; the saved row replaces it after refreshPosts()
+      let url = ''; try { url = thumb().toDataURL('image/jpeg', 0.75) } catch {}
+      setPosts((list) => [{ ...(list.find((p) => p.id === rowId) || {}), ...metaNow('posted'), ...igx, id: rowId, url: url || list.find((p) => p.id === rowId)?.url, created_at: list.find((p) => p.id === rowId)?.created_at || now, updated_at: now }, ...list.filter((p) => p.id !== rowId)])
+      setIgFeed((f) => ({ ...f, loaded: false })) // reload the Instagram feed (merged by ig_media_id, no duplicate)
+      const b = await new Promise((res) => c.toBlob(res, 'image/png'))
+      await remember(b || undefined, igx)
     } catch (e) { say('Postimi dështoi: ' + e.message) }
     setIgBusy(false)
   }
@@ -174,7 +200,7 @@ export default function useEditor(user) {
   // Only for rows published to Instagram (media id or permalink); null otherwise
   const igUrlFor = (p) => (postStatus(p) === 'posted' ? p.ig_permalink || igProfileUrl(ig?.username || contact.instagram) : null)
   // photo2 is kept out of `extra` (it is stored as a file, see persistNow)
-  const metaNow = (status) => ({ model, price, offer, spec, info, cta, model_code: code, region, no_active: noActive, extra: { ...x, photo2: '' }, template: tpl, type, theme, caption, status })
+  const metaNow = (status) => ({ model, price, offer, spec, info, cta, model_code: code, region, no_active: noActive, extra: { ...x, photo2: '', caption_opts: { ...capOpts, variant, edited: captionEdited } }, template: tpl, type, theme, caption, status })
   function thumb(q = 0.25) { const c = document.createElement('canvas'); renderTo(c, tpl, type, th, data, q); return c }
   const toBlob = (c, t, q) => new Promise((res, rej) => { try { c.toBlob((b) => (b ? res(b) : rej(new Error('toBlob failed'))), t, q) } catch (e) { rej(e) } })
   const newId = () => (globalThis.crypto?.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => { const r = (Math.random() * 16) | 0; return (ch === 'x' ? r : (r & 3) | 8).toString(16) }))
@@ -235,7 +261,9 @@ export default function useEditor(user) {
   const saveQ = useRef(Promise.resolve())
   const persist = (...a) => (saveQ.current = saveQ.current.then(() => persistNow(...a)).catch((e) => { console.error(e); return false }))
   // Download/share -> 'exported'; only a successful direct Instagram publish (has a media id) -> 'posted'
-  async function remember(blob, ig) { clearTimeout(draftT.current); dirty.current = false; await persist(ig?.ig_media_id ? 'posted' : 'exported', blob, ig); refreshPosts() }
+  async function remember(blob, ig) {
+    if (!ig?.ig_media_id && publishedRef.current) return // download/share of an already posted design: no extra "Shkarkuar" row
+    clearTimeout(draftT.current); dirty.current = false; await persist(ig?.ig_media_id ? 'posted' : 'exported', blob, ig); refreshPosts() }
   async function saveDraft(silent) {
     if (!img) return
     clearTimeout(draftT.current); dirty.current = false; setDraftState('saving')
@@ -257,14 +285,22 @@ export default function useEditor(user) {
       let p2 = ''; if (b2) { try { p2 = await blobToDataURL(b2) } catch {} }
       const pst = postStatus(p), isDraft = pst !== 'posted' // drafts and exported posts are edited in place
       clearTimeout(draftT.current); dirty.current = false
-      restoring.current = true; setTimeout(() => { restoring.current = false }, 500)
+      restoring.current = true // state below is loaded, not edited: no autosave (cleared in finally)
+      setPublished(pst === 'posted' ? { id: p.id, ig_media_id: p.ig_media_id || null, permalink: p.ig_permalink || null } : null)
+      setIgLink(pst === 'posted' ? p.ig_permalink || '' : '')
       setModel(p.model || ''); setPrice(p.price || ''); setOffer(p.offer || ''); setSpec(p.spec || ''); setInfo(p.info || ''); setCta(p.cta || '')
-      setXAll({ ...EMPTY_X, ...(p.extra || {}), photo2: p2 }); setCode(p.model_code || ''); setRegion(p.region || ''); setNoActive(Boolean(p.no_active))
+      const { caption_opts: co, ...ex } = p.extra || {}
+      // caption: the saved text is kept when it was edited by hand; otherwise it is regenerated with the saved style
+      if (co) { setCapOptsState({ ...DEFAULT_CAPTION_OPTS, style: co.style || DEFAULT_CAPTION_OPTS.style, price: co.price !== false, contact: co.contact !== false, tags: co.tags || DEFAULT_CAPTION_OPTS.tags }); setVariant(Number(co.variant) || 0) }
+      setCaptionEdited(Boolean(co?.edited && p.caption)); if (co?.edited && p.caption) setCaption(p.caption)
+      setXAll({ ...EMPTY_X, ...ex, photo2: p2 }); setCode(p.model_code || ''); setRegion(p.region || ''); setNoActive(Boolean(p.no_active))
       setTpl(p.template || 'hero'); setType(p.type || 'post'); setTheme(p.theme || 'standard')
       // Draft: keep editing the same row. Posted: edits become a new draft (new id, own copies).
       idRef.current = isDraft ? p.id : null
       pathsRef.current = isDraft && !p.pending ? { image_path: p.image_path || null, photo_path: p.photo_path || null, photo2_path: p.photo2_path || null, photo_orig_path: p.photo_orig_path || null } : {}
       photoRef.current = { blob: im ? b1 : null, orig: im ? b0 || null : null, dirty: im ? !(isDraft && p.photo_path) : false }
+      let io = null; if (im && b0) { try { io = await blobToImg(b0) } catch {} }
+      setImgOrig(io)
       // Older photos with a solid background (white box): offer the same "Hiq sfondin" toggle
       let smooth = false, cut = Boolean(b0)
       if (im && !b0) { try { const a = await canFlood(b1); smooth = a.smooth; cut = a.alpha } catch {} }
@@ -275,10 +311,11 @@ export default function useEditor(user) {
       const offerBg = im && !cut && smooth
       setTab(im && !offerBg ? 'detajet' : 'foto')
       say(offerBg ? 'Mund ta heqësh sfondin e fotos me “Hiq sfondin”' : im ? (pst === 'draft' ? 'Drafti u hap' : pst === 'exported' ? 'Postimi u hap' : 'Të dhënat u ngarkuan') : 'Fotoja e produktit mungon – ngarkoje përsëri, të dhënat u ruajtën')
-    } finally { setOpening(null) }
+    } finally { setOpening(null); setTimeout(() => { restoring.current = false }, 150) }
   }
   function newPost() {
-    idRef.current = null; pathsRef.current = {}; photoRef.current = { blob: null, orig: null, dirty: false }; photo2Saved.current = ''
+    setPublished(null); setIgLink('')
+    idRef.current = null; pathsRef.current = {}; photoRef.current = { blob: null, orig: null, dirty: false }; photo2Saved.current = ''; setImgOrig(null)
     setBg({ removed: false, smooth: false, busy: '', progress: 0 })
     setDraftId(null); setDraftState(''); setPhotoMissing(false); setModel(''); setPrice(''); setOffer(''); setSpec(''); setXAll(EMPTY_X); setCode(''); setRegion(''); setNoActive(false); setCaptionEdited(false); dirty.current = false
   }
@@ -320,14 +357,23 @@ export default function useEditor(user) {
   }, [logoUrl, contact, user, synced])
 
   const th = themeById(theme)
-  const data = useMemo(() => ({ img, model, price, offer, spec, info, cta, code, region, noActive, ...x, img2, contact, logo: logoImg }), [img, model, price, offer, spec, info, cta, code, region, noActive, x, img2, contact, logoImg])
-  useEffect(() => { if (!captionEdited) setCaption(makeCaption({ model, price, offer, specF, info, code, region, noActive, ...x, contact }, theme, variant)) }, [model, price, offer, spec, info, code, region, noActive, x, contact, theme, variant, captionEdited])
+  const data = useMemo(() => ({ img, imgOrig, model, price, offer, spec, info, cta, code, region, noActive, ...x, img2, contact, logo: logoImg }), [img, imgOrig, model, price, offer, spec, info, cta, code, region, noActive, x, img2, contact, logoImg])
+  useEffect(() => { if (!captionEdited) setCaption(makeCaption({ model, price, offer, specF, info, code, region, noActive, ...x, contact }, theme, variant, capOpts)) }, [model, price, offer, spec, info, code, region, noActive, x, contact, theme, variant, captionEdited, capOpts])
+  // caption edits / style changes are saved with the draft too (but never turn an already posted design into a new draft)
+  const capFirst = useRef(true)
+  useEffect(() => {
+    if (capFirst.current) { capFirst.current = false; return }
+    if (restoring.current || !img || publishedRef.current) return
+    dirty.current = true; clearTimeout(draftT.current)
+    draftT.current = setTimeout(() => { if (dirty.current) saveDraft(true) }, 2500)
+  }, [caption, captionEdited, capOpts])
   // Autoruajtje e draftit (pas 2.5 s pa ndryshime)
   const firstRun = useRef(true)
   useEffect(() => {
     if (firstRun.current) { firstRun.current = false; return }
-    if (restoring.current) { restoring.current = false; return } // state just loaded from a saved draft
+    if (restoring.current) return // state is being loaded from a saved post (reuse)
     if (!img) return
+    if (publishedRef.current) { setPublished(null); setIgLink('') } // edited after posting = a new design (new draft)
     dirty.current = true; setDraftState('')
     clearTimeout(draftT.current)
     draftT.current = setTimeout(() => { if (dirty.current) saveDraft(true) }, 2500)
@@ -340,7 +386,8 @@ export default function useEditor(user) {
   // the Photo step then shows the result with "Hiq sfondin" / "Rikthe origjinalin" (and the AI for busy backgrounds).
   async function usePhoto(blob, orig) {
     const im = await blobToImg(blob)
-    photoRef.current = { blob, orig: orig || null, dirty: true }; setImg(im)
+    let io = null; if (orig) { try { io = await blobToImg(orig) } catch {} }
+    photoRef.current = { blob, orig: orig || null, dirty: true }; setImg(im); setImgOrig(io)
   }
   async function onPhoto(e) {
     const f = e.target.files?.[0]; if (!f) return
@@ -351,6 +398,7 @@ export default function useEditor(user) {
       let cut = null, a = { smooth: false, alpha: false }
       try { a = await canFlood(b); if (a.smooth) cut = await floodRemove(b) } catch (err) { console.error(err) }
       await usePhoto(cut || b, cut ? b : null)
+      setPublished(null); setIgLink('')
       setBg({ removed: Boolean(cut) || a.alpha, smooth: a.smooth, busy: '', progress: 0 })
       setTab('foto'); setPhotoMissing(false)
       if (cut) say('Sfondi u hoq automatikisht')
@@ -391,5 +439,5 @@ export default function useEditor(user) {
   const next = TABS[idx + 1]
   const preview = img && !['foto', 'template'].includes(tab)
 
-  return { stats, refreshStats, statsNeedReconnect, postsView, igFeed, refreshInstagram, bg, setBgRemoved, photoBlob: () => photoRef.current, photoMissing, opening, igUrlFor, x, setX, setXAll, img2, contact, setContact, specF, setSpecField, code, setCode, region, setRegion, noActive, setNoActive, draftId, draftState, saveDraft, newPost, caption, captionEdited, copyCaption, cta, data, download, fileName, idx, ig, igBusy, igLink, img, info, localPosts, logoImg, logoUrl, makeBlob, model, next, offer, onPhoto, posts, postsBusy, preview, price, publishDirect, ready, refreshPosts, remember, removePost, reuse, saveT, say, setCaption, setCaptionEdited, setCta, setIg, setIgBusy, setIgLink, setImg, setInfo, setLogoImg, setLogoUrl, setModel, setOffer, setPosts, setPostsBusy, setPrice, setReady, setSettings, setSpec, setSynced, setTab, setTheme, setToast, setTpl, setType, setVariant, settings, share, spec, synced, tab, th, theme, toast, tpl, type, user, variant }
+  return { capOpts, setCapOpts, published, stats, refreshStats, statsNeedReconnect, postsView, igFeed, refreshInstagram, bg, setBgRemoved, photoBlob: () => photoRef.current, photoMissing, opening, igUrlFor, x, setX, setXAll, img2, contact, setContact, specF, setSpecField, code, setCode, region, setRegion, noActive, setNoActive, draftId, draftState, saveDraft, newPost, caption, captionEdited, copyCaption, cta, data, download, fileName, idx, ig, igBusy, igLink, img, info, localPosts, logoImg, logoUrl, makeBlob, model, next, offer, onPhoto, posts, postsBusy, preview, price, publishDirect, ready, refreshPosts, remember, removePost, reuse, saveT, say, setCaption, setCaptionEdited, setCta, setIg, setIgBusy, setIgLink, setImg, setInfo, setLogoImg, setLogoUrl, setModel, setOffer, setPosts, setPostsBusy, setPrice, setReady, setSettings, setSpec, setSynced, setTab, setTheme, setToast, setTpl, setType, setVariant, settings, share, spec, synced, tab, th, theme, toast, tpl, type, user, variant }
 }

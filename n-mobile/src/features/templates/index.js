@@ -11,6 +11,7 @@ import red from './designs/red.js'
 import studio from './designs/studio.js'
 import catalog from './designs/catalog.js'
 import bento from './designs/bento.js'
+import { ovTitle, ovBar, ovMin, ovDeal, ovGlass } from './designs/mbifoto.js'
 import { SIZES, smartCase, normOffer } from './shared/blocks.js'
 export { REGIONS } from './shared/meta.js'
 export { SIZES, fmtPrice, specParts, smartCase, normOffer } from './shared/blocks.js'
@@ -33,6 +34,12 @@ export const TEMPLATES = [
   { id: 'pricehero', name: 'Çmimi si hero', draw: pricehero, fields: ['title', 'offer', 'oldPrice', 'slogan', 'meta', 'badge', 'spec', 'colors', 'info'] },
   { id: 'specsheet', name: 'Specifikime', draw: specsheet, fields: ['title', 'oldPrice', 'badge', 'spec'], storyFields: ['meta'] },
   { id: 'cards', name: 'Karta', draw: cards, fields: ['title', 'offer', 'oldPrice', 'slogan', 'meta', 'badge', 'spec', 'colors', 'info'] },
+  // "Mbi foto": the photo (as taken, e.g. in hand in the shop) fills the post and the text sits on top
+  { id: 'ov-title', group: 'Mbi foto', name: 'Mbi foto · Titull', draw: ovTitle, fields: ['title', 'offer', 'oldPrice', 'meta', 'badge'] },
+  { id: 'ov-bar', group: 'Mbi foto', name: 'Mbi foto · Shirit', draw: ovBar, fields: ['title', 'offer', 'oldPrice', 'meta', 'badge', 'spec'] },
+  { id: 'ov-min', group: 'Mbi foto', name: 'Mbi foto · Minimal', draw: ovMin, fields: ['title', 'offer', 'oldPrice', 'meta', 'badge'] },
+  { id: 'ov-deal', group: 'Mbi foto', name: 'Mbi foto · Ofertë', draw: ovDeal, fields: ['title', 'offer', 'oldPrice', 'spec'], storyFields: ['info'] },
+  { id: 'ov-glass', group: 'Mbi foto', name: 'Mbi foto · Xham', draw: ovGlass, fields: ['title', 'offer', 'oldPrice', 'slogan', 'meta', 'badge', 'spec', 'colors', 'info'] },
 ]
 
 export const ALWAYS_FIELDS = ['model', 'series', 'price', 'cta']
