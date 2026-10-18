@@ -23,3 +23,4 @@ Run each file once, in order, in the Supabase dashboard: **SQL Editor → New qu
 - `008_exported_status.sql` – new `posts.status` value `exported` (downloaded/shared only); old 'posted' rows without Instagram id/link become 'exported' (applied).
 - `009_photo_original.sql` – `posts.photo_orig_path` (original upload kept while the background is removed, for undo) (applied).
 - `010_instagram_insights.sql` – `posts.ig_stats` / `ig_stats_at` (cached Instagram statistics) and `instagram_accounts.scopes` (granted permissions) (applied).
+- `011_instagram_shared.sql` – index on `instagram_accounts.ig_user_id` (same Instagram account on several app logins is allowed) and `instagram_media_stats` (statistics per Instagram media, server-only) (applied).

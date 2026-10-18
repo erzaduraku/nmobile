@@ -4,7 +4,8 @@ import { themeById } from '../features/themes/themes.js'
 import { makeCaption } from '../features/editor/caption.js'
 import { loadSettings, saveSettings } from '../features/settings/settingsApi.js'
 import { savePost, listPosts, deletePost, postStatus } from '../features/posts/postsApi.js'
-import { finishInstagramLogin, getInstagramAccount, publishToInstagram, findPermalinks, igProfileUrl, fetchInsights, hasInsightsScope } from '../features/instagram/instagram.js'
+import { mergeIgFeed } from '../features/posts/igFeed.js'
+import { finishInstagramLogin, getInstagramAccount, publishToInstagram, findPermalinks, igProfileUrl, fetchInsights, hasInsightsScope, listInstagramMedia } from '../features/instagram/instagram.js'
 import { LS, loadImg } from '../lib/storage.js'
 import { floodRemove, aiRemove, canFlood } from '../lib/bgRemove.js'
 import { idbPut, idbGet, idbDel, idbKeys, photoKey, blobToImg, blobToDataURL, dataURLToBlob, fetchBlob, prepPhoto } from '../lib/photoStore.js'
@@ -112,28 +113,62 @@ export default function useEditor(user) {
         const loc = localPosts(); if (loc.some((p) => links[p.id])) LS.set('posts', JSON.stringify(loc.map((p) => (links[p.id] ? { ...p, ig_permalink: links[p.id] } : p))))
       }).catch(() => {})
   }, [posts, ig, user])
-  // Instagram statistics for published posts: cached in posts.ig_stats, refreshed automatically when older
-  // than 6h (once per session) or with the refresh button. needsReconnect = token lacks the insights permission.
+  // What is actually published on the connected Instagram account (also posts made outside the app or from
+  // another app login connected to the same account). Loaded once per session + with the refresh button;
+  // the last result is cached per Instagram account in localStorage so the list shows instantly.
+  const [igFeed, setIgFeed] = useState({ media: [], loaded: false, busy: false, error: '', code: '' })
+  const [igStats, setIgStats] = useState({}) // media id -> latest insights fetched in this session
+  const feedKey = ig?.ig_user_id ? 'igfeed_' + ig.ig_user_id : ''
+  useEffect(() => {
+    setIgStats({})
+    if (!feedKey) { setIgFeed({ media: [], loaded: false, busy: false, error: '', code: '' }); return }
+    let media = []; try { media = JSON.parse(LS.get(feedKey, '[]')) } catch {}
+    setIgFeed({ media, loaded: false, busy: false, error: '', code: '' })
+  }, [feedKey])
+  async function loadIgFeed() {
+    if (!user || !ig) return null
+    setIgFeed((f) => ({ ...f, busy: true, error: '', code: '' }))
+    try {
+      const r = await listInstagramMedia()
+      if (r.error) { setIgFeed((f) => ({ ...f, busy: false, loaded: true, error: r.error, code: r.code || 'instagram' })); return null }
+      const media = r.media || []
+      setIgFeed({ media, loaded: true, busy: false, error: '', code: '' })
+      try { LS.set(feedKey, JSON.stringify(media)) } catch {}
+      return media
+    } catch (e) { setIgFeed((f) => ({ ...f, busy: false, loaded: true, error: e.message, code: 'network' })); return null }
+  }
+  const postsView = useMemo(() => mergeIgFeed(posts, user && ig ? igFeed.media : [], igStats), [posts, igFeed.media, igStats, user, ig])
+  // Instagram statistics for every published post (app rows cached in posts.ig_stats, all media also in
+  // instagram_media_stats). Refreshed automatically when older than 6h (once per session) or with the button.
   const [stats, setStats] = useState({ busy: false, needsReconnect: false, error: '' })
   const statsAuto = useRef(false)
-  async function refreshStats(manual = true) {
-    const items = posts.filter((p) => postStatus(p) === 'posted' && p.ig_media_id).map((p) => ({ id: p.id, media_id: p.ig_media_id }))
+  async function refreshStats(manual = true, rows = postsView) {
+    const items = rows.filter((p) => postStatus(p) === 'posted' && p.ig_media_id).map((p) => ({ id: p.id, media_id: String(p.ig_media_id) }))
     if (!user || !ig || !items.length) return
     setStats((s) => ({ ...s, busy: true, error: '' }))
     try {
       const r = await fetchInsights(items)
+      const byMedia = {}
+      for (const it of items) if (r.stats?.[it.id]) byMedia[it.media_id] = r.stats[it.id]
+      setIgStats((m) => ({ ...m, ...byMedia }))
       setPosts((list) => list.map((p) => (r.stats?.[p.id] ? { ...p, ig_stats: r.stats[p.id], ig_stats_at: r.stats[p.id].fetched_at } : p)))
       setStats({ busy: false, needsReconnect: Boolean(r.needsReconnect), error: '' })
       if (manual) say(r.needsReconnect ? 'Lidhe sërish Instagramin për statistikat' : 'Statistikat u përditësuan')
     } catch (e) { setStats({ busy: false, needsReconnect: false, error: 'Statistikat nuk u ngarkuan' }); if (manual) say('Statistikat nuk u ngarkuan') }
   }
+  // Refresh button: Instagram feed first (new media), then statistics for everything
+  async function refreshInstagram() {
+    const media = await loadIgFeed()
+    await refreshStats(true, media ? mergeIgFeed(posts, media, igStats) : postsView)
+  }
+  useEffect(() => { if (user && ig && !postsBusy && !igFeed.loaded && !igFeed.busy) loadIgFeed() }, [user, ig, postsBusy, igFeed.loaded])
   useEffect(() => {
-    if (statsAuto.current || !user || !ig || postsBusy) return
-    const pub = posts.filter((p) => postStatus(p) === 'posted' && p.ig_media_id)
+    if (statsAuto.current || !user || !ig || postsBusy || !igFeed.loaded) return
+    const pub = postsView.filter((p) => postStatus(p) === 'posted' && p.ig_media_id)
     if (!pub.length) return
     statsAuto.current = true
-    if (pub.some((p) => !p.ig_stats_at || Date.now() - Date.parse(p.ig_stats_at) > 6 * 36e5)) refreshStats(false)
-  }, [posts, ig, user, postsBusy])
+    if (pub.some((p) => !p.ig_stats?.fetched_at || Date.now() - Date.parse(p.ig_stats.fetched_at) > 6 * 36e5)) refreshStats(false)
+  }, [postsView, ig, user, postsBusy, igFeed.loaded])
   const statsNeedReconnect = Boolean(ig) && (stats.needsReconnect || !hasInsightsScope(ig))
   // Ku të çojë "Hape në Instagram": postimi i saktë, ose profili nëse linku s'dihet
   // Only for rows published to Instagram (media id or permalink); null otherwise
@@ -356,5 +391,5 @@ export default function useEditor(user) {
   const next = TABS[idx + 1]
   const preview = img && !['foto', 'template'].includes(tab)
 
-  return { stats, refreshStats, statsNeedReconnect, bg, setBgRemoved, photoBlob: () => photoRef.current, photoMissing, opening, igUrlFor, x, setX, setXAll, img2, contact, setContact, specF, setSpecField, code, setCode, region, setRegion, noActive, setNoActive, draftId, draftState, saveDraft, newPost, caption, captionEdited, copyCaption, cta, data, download, fileName, idx, ig, igBusy, igLink, img, info, localPosts, logoImg, logoUrl, makeBlob, model, next, offer, onPhoto, posts, postsBusy, preview, price, publishDirect, ready, refreshPosts, remember, removePost, reuse, saveT, say, setCaption, setCaptionEdited, setCta, setIg, setIgBusy, setIgLink, setImg, setInfo, setLogoImg, setLogoUrl, setModel, setOffer, setPosts, setPostsBusy, setPrice, setReady, setSettings, setSpec, setSynced, setTab, setTheme, setToast, setTpl, setType, setVariant, settings, share, spec, synced, tab, th, theme, toast, tpl, type, user, variant }
+  return { stats, refreshStats, statsNeedReconnect, postsView, igFeed, refreshInstagram, bg, setBgRemoved, photoBlob: () => photoRef.current, photoMissing, opening, igUrlFor, x, setX, setXAll, img2, contact, setContact, specF, setSpecField, code, setCode, region, setRegion, noActive, setNoActive, draftId, draftState, saveDraft, newPost, caption, captionEdited, copyCaption, cta, data, download, fileName, idx, ig, igBusy, igLink, img, info, localPosts, logoImg, logoUrl, makeBlob, model, next, offer, onPhoto, posts, postsBusy, preview, price, publishDirect, ready, refreshPosts, remember, removePost, reuse, saveT, say, setCaption, setCaptionEdited, setCta, setIg, setIgBusy, setIgLink, setImg, setInfo, setLogoImg, setLogoUrl, setModel, setOffer, setPosts, setPostsBusy, setPrice, setReady, setSettings, setSpec, setSynced, setTab, setTheme, setToast, setTpl, setType, setVariant, settings, share, spec, synced, tab, th, theme, toast, tpl, type, user, variant }
 }

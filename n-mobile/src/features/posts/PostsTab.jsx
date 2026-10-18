@@ -18,10 +18,11 @@ function StatsGrid({ s }) {
     </div>
   )
 }
+const KIND = (p) => (p.ig?.media_product_type === 'STORY' ? 'Story' : p.ig?.media_product_type === 'REELS' || p.ig?.media_type === 'VIDEO' ? 'Reel' : p.ig?.media_type === 'CAROUSEL_ALBUM' ? 'Album' : 'Postim')
 const BADGE = { draft: ['Draft', 'bg-amber-400 text-neutral-900'], posted: ['Postuar', 'bg-green-600 text-white'], exported: ['Shkarkuar', 'bg-white/90 text-neutral-800'] }
 
 export default function PostsTab({ ed }) {
-  const { posts, postsBusy, removePost, reuse, user, igUrlFor, opening, ig, stats, refreshStats, statsNeedReconnect } = ed
+  const { postsView: posts, postsBusy, removePost, reuse, user, igUrlFor, opening, ig, stats, statsNeedReconnect, igFeed, refreshInstagram } = ed
   const [f, setF] = useState('all')
   const [del, setDel] = useState(null) // postimi që po fshihet (dritarja e konfirmimit)
   const [zoom, setZoom] = useState(null) // url e fotos së hapur të madhe
@@ -30,12 +31,13 @@ export default function PostsTab({ ed }) {
   const list = f === 'all' ? posts : posts.filter((p) => st(p) === f)
   const promo = useMemo(() => pickPromote(posts.filter((p) => st(p) === 'posted')), [posts])
   const promoPost = promo && posts.find((p) => p.id === promo.id)
-  const canStats = Boolean(user && ig && posts.some((p) => st(p) === 'posted' && p.ig_media_id))
+  const canStats = Boolean(user && ig)
+  const busy = stats.busy || igFeed.busy
   return (
     <div>
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-lg font-extrabold">Postimet e mia</h2>
-        {canStats && <button onClick={() => refreshStats()} disabled={stats.busy} className="rounded-xl border-2 border-neutral-200 text-xs font-bold px-2.5 py-1.5 flex items-center gap-1 text-neutral-700 disabled:opacity-60"><RefreshCw size={14} className={stats.busy ? 'animate-spin' : ''} /> Rifresko statistikat</button>}
+        {canStats && <button onClick={() => refreshInstagram()} disabled={busy} className="rounded-xl border-2 border-neutral-200 text-xs font-bold px-2.5 py-1.5 flex items-center gap-1 text-neutral-700 disabled:opacity-60"><RefreshCw size={14} className={busy ? 'animate-spin' : ''} /> Rifresko statistikat</button>}
       </div>
       <p className="text-sm text-neutral-500 mb-3">{user ? 'Ruhen në llogarinë tënde.' : 'Ruhen vetëm në këtë pajisje.'} Draftet ruhen vetë gjatë punës.</p>
       <div className="grid grid-cols-3 gap-1 p-1 rounded-2xl bg-neutral-100 mb-4">
@@ -45,7 +47,31 @@ export default function PostsTab({ ed }) {
           </button>
         ))}
       </div>
-      {canStats && statsNeedReconnect && (
+      {user && !ig && f !== 'draft' && (
+        <div className="mb-4 rounded-2xl border-2 border-neutral-200 bg-neutral-50 p-3 flex items-start gap-2 text-sm">
+          <Link2 size={18} className="text-neutral-500 shrink-0 mt-0.5" />
+          <div><div className="font-bold">Instagrami nuk është i lidhur</div><p className="text-xs text-neutral-600 mt-0.5">Lidhe te Cilësimet që të shohësh këtu gjithçka që është postuar në llogarinë tënde të Instagramit.</p></div>
+        </div>
+      )}
+      {canStats && igFeed.code === 'reconnect' && (
+        <div className="mb-4 rounded-2xl border-2 border-amber-300 bg-amber-50 p-3 flex items-start gap-2">
+          <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-bold">Lidhja me Instagramin ka skaduar</div>
+            <p className="text-xs text-neutral-600 mt-0.5">Lidhe sërish që të shfaqen postimet nga Instagrami.</p>
+            <button onClick={startInstagramLogin} className="mt-2 rounded-xl bg-brand text-white text-xs font-bold px-3 py-1.5 flex items-center gap-1"><Link2 size={14} /> Lidhe sërish</button>
+          </div>
+        </div>
+      )}
+      {canStats && igFeed.error && igFeed.code !== 'reconnect' && (
+        <div className="mb-4 rounded-2xl border-2 border-neutral-200 bg-neutral-50 p-3 flex items-center gap-2 text-sm">
+          <AlertTriangle size={18} className="text-neutral-500 shrink-0" />
+          <div className="flex-1 font-bold">Postimet e Instagramit nuk u ngarkuan.</div>
+          <button onClick={() => refreshInstagram()} disabled={busy} className="rounded-xl bg-neutral-200 text-xs font-bold px-3 py-1.5">Provo sërish</button>
+        </div>
+      )}
+      {canStats && igFeed.busy && !igFeed.media.length && f !== 'draft' && <div className="mb-3 text-xs text-neutral-500 flex items-center gap-1.5"><Loader2 size={14} className="animate-spin text-brand" /> Po ngarkohen postimet nga Instagrami…</div>}
+      {canStats && statsNeedReconnect && igFeed.code !== 'reconnect' && (
         <div className="mb-4 rounded-2xl border-2 border-amber-300 bg-amber-50 p-3 flex items-start gap-2">
           <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
@@ -60,7 +86,7 @@ export default function PostsTab({ ed }) {
           {promoPost.url ? <img src={promoPost.url} alt="" className="w-14 h-14 rounded-xl object-cover shrink-0" /> : <div className="w-14 h-14 rounded-xl bg-neutral-100 shrink-0" />}
           <div className="flex-1 min-w-0">
             <div className="text-xs font-extrabold text-brand flex items-center gap-1"><Megaphone size={14} /> Ia vlen me u promovu</div>
-            <div className="text-sm font-bold truncate">{promoPost.model || 'Pa emër'}</div>
+            <div className="text-sm font-bold truncate">{promoPost.model || 'Postim në Instagram'}</div>
             <p className="text-xs text-neutral-600">{promo.reason}</p>
             {igUrlFor(promoPost) && <a href={igUrlFor(promoPost)} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex rounded-xl bg-brand text-white text-xs font-bold px-3 py-1.5 items-center gap-1"><Megaphone size={14} /> Promovoje në Instagram</a>}
           </div>
@@ -73,21 +99,23 @@ export default function PostsTab({ ed }) {
           <div key={p.id} className={`rounded-2xl border-2 overflow-hidden ${promo?.id === p.id ? 'border-brand' : 'border-neutral-200'}`}>
             <div className="relative">
               {p.url
-                ? <button type="button" onClick={() => setZoom(p.url)} aria-label="Shiko të madhe" className="block w-full"><img src={p.url} alt="" className="w-full block" /><span className="absolute bottom-2 right-2 w-7 h-7 rounded-full bg-black/55 text-white grid place-items-center"><Maximize2 size={14} /></span></button>
+                ? <button type="button" onClick={() => setZoom(p.url)} aria-label="Shiko të madhe" className="block w-full"><img src={p.url} alt="" referrerPolicy="no-referrer" className={`w-full block ${p.igOnly ? 'aspect-[4/5] object-cover bg-neutral-100' : ''}`} /><span className="absolute bottom-2 right-2 w-7 h-7 rounded-full bg-black/55 text-white grid place-items-center"><Maximize2 size={14} /></span></button>
                 : <div className="aspect-[4/5] bg-neutral-100" />}
               <span className={`absolute top-2 left-2 text-[11px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${BADGE[st(p)][1]}`}>{st(p) === 'exported' && <Download size={11} />}{BADGE[st(p)][0]}</span>
               {p.pending && <span className="absolute top-2 right-2 text-[11px] font-bold px-2 py-0.5 rounded-full bg-neutral-900/70 text-white">Në pajisje</span>}
             </div>
             {promo?.id === p.id && <div className="bg-brand text-white text-[11px] font-bold px-2 py-1 flex items-center gap-1"><Megaphone size={12} /> Ia vlen me u promovu</div>}
             <div className="p-2">
-              <div className="font-semibold text-sm truncate">{p.model || 'Pa emër'}</div>
+              {p.igOnly
+                ? <><div className="text-[11px] font-bold text-neutral-400 flex items-center gap-1">{KIND(p)} · nga Instagrami</div><div className="text-sm line-clamp-2 leading-snug min-h-[2.5em]">{p.caption ? p.caption.trim() : <span className="text-neutral-400">Pa përshkrim</span>}</div></>
+                : <div className="font-semibold text-sm truncate">{p.model || 'Pa emër'}</div>}
               <div className="text-xs text-neutral-500">{new Date(p.updated_at || p.created_at).toLocaleDateString('sq-AL')}</div>
               {st(p) === 'posted' && p.ig_stats && <StatsGrid s={p.ig_stats} />}
-              {st(p) === 'posted' && !p.ig_stats && p.ig_media_id && canStats && <div className="mt-2 text-[11px] text-neutral-400">{stats.busy ? 'Po ngarkohen statistikat…' : 'Pa statistika ende'}</div>}
-              <div className="grid grid-cols-2 gap-2 mt-2">
+              {st(p) === 'posted' && !p.ig_stats && p.ig_media_id && canStats && <div className="mt-2 text-[11px] text-neutral-400">{busy ? 'Po ngarkohen statistikat…' : 'Pa statistika ende'}</div>}
+              {!p.igOnly && <div className="grid grid-cols-2 gap-2 mt-2">
                 <button className="rounded-xl bg-brand text-white text-sm font-bold py-2 flex items-center justify-center gap-1" disabled={Boolean(opening)} onClick={() => reuse(p)}>{opening === p.id ? <Loader2 size={15} className="animate-spin" /> : <PenLine size={15} />} {st(p) === 'draft' ? 'Vazhdo' : 'Edito'}</button>
                 <button className="rounded-xl bg-neutral-100 text-sm font-bold py-2 flex items-center justify-center gap-1" onClick={() => setDel(p)} aria-label="Fshi"><Trash2 size={15} /> Fshi</button>
-              </div>
+              </div>}
               {st(p) === 'posted' && igUrlFor(p) && (
                 <a href={igUrlFor(p)} target="_blank" rel="noopener noreferrer" className="mt-2 rounded-xl border-2 border-neutral-200 text-xs font-bold py-1.5 flex items-center justify-center gap-1 text-neutral-700"><ExternalLink size={14} /> Hape në Instagram</a>
               )}

@@ -7,7 +7,8 @@
 //   field counts are returned. ('impressions' is deprecated for media after 2024-07-02; 'views' replaces it.)
 // - Metrics differ per media type (STORY has no likes/comments/saved). If Instagram rejects a metric,
 //   the remaining ones are retried one by one, so one unsupported metric never hides the others.
-// Results are cached on the user's own rows (posts.ig_stats / ig_stats_at, migration 010). Token stays server-side.
+// Results are cached on the user's own rows (posts.ig_stats / ig_stats_at, migration 010) and in
+// instagram_media_stats (migration 011, shared by every app login connected to the same Instagram account). Token stays server-side.
 import { admin, cors, freshToken, json, userFrom } from '../_shared/common.ts'
 
 const G = 'https://graph.instagram.com/v26.0'
@@ -47,19 +48,19 @@ Deno.serve(async (req) => {
     let needsReconnect = scopes !== '' && !scopes.includes('instagram_business_manage_insights')
     const stats: Record<string, Record<string, unknown>> = {}
     const errors: Record<string, string> = {}
-    const list = (Array.isArray(items) ? items : []).filter((it) => it?.id && it?.media_id).slice(0, 30)
-    for (const it of list) {
+    const list = (Array.isArray(items) ? items : []).filter((it) => it?.id && it?.media_id).slice(0, 60)
+    async function one(it: { id: string; media_id: string }) {
       const mid = encodeURIComponent(String(it.media_id))
       const s: Record<string, unknown> = {}
       const f = await get(`${G}/${mid}?fields=like_count,comments_count,media_product_type,media_type,timestamp&access_token=${token}`)
-      if (!f.ok) { errors[it.id] = f.err?.message || 'media not found'; continue }
+      if (!f.ok) { errors[it.id] = f.err?.message || 'media not found'; return }
       s.likes = f.j.like_count ?? null; s.comments = f.j.comments_count ?? null
       s.media_product_type = f.j.media_product_type || 'FEED'; s.timestamp = f.j.timestamp || null
       if (!needsReconnect) {
         const metrics = METRICS[s.media_product_type as string] || METRICS.FEED
         let r = await get(`${G}/${mid}/insights?metric=${metrics.join(',')}&access_token=${token}`)
-        let vals: Record<string, number> = {}
-        if (r.ok) vals = readValues(r.j.data)
+        const vals: Record<string, number> = {}
+        if (r.ok) Object.assign(vals, readValues(r.j.data))
         else if (isPermission(r.err)) needsReconnect = true
         else { // an unsupported metric fails the whole call: retry one by one
           for (const m of metrics) { r = await get(`${G}/${mid}/insights?metric=${m}&access_token=${token}`); if (r.ok) Object.assign(vals, readValues(r.j.data)); else if (isPermission(r.err)) { needsReconnect = true; break } }
@@ -70,11 +71,18 @@ Deno.serve(async (req) => {
       s.fetched_at = new Date().toISOString()
       stats[it.id] = s
     }
-    // cache on the user's own rows (device-only rows have non-uuid ids and are skipped)
-    for (const [id, s] of Object.entries(stats)) {
-      if (!/^[0-9a-f-]{36}$/i.test(id)) continue
-      await db.from('posts').update({ ig_stats: s, ig_stats_at: s.fetched_at }).eq('id', id).eq('user_id', user.id)
+    // a few media in parallel (Instagram rate limits are per account; 5 at a time is gentle)
+    for (let i = 0; i < list.length; i += 5) await Promise.all(list.slice(i, i + 5).map(one))
+    // cache on the user's own app rows (device-only rows have non-uuid ids and are skipped)
+    // and per Instagram account + media id (migration 011), so posts made outside the app and
+    // other app logins connected to the same Instagram account see the same statistics
+    const shared = []
+    for (const it of list) {
+      const s = stats[it.id]; if (!s) continue
+      shared.push({ ig_user_id: String(acc.ig_user_id), media_id: String(it.media_id), stats: s, fetched_at: s.fetched_at })
+      if (/^[0-9a-f-]{36}$/i.test(it.id)) await db.from('posts').update({ ig_stats: s, ig_stats_at: s.fetched_at }).eq('id', it.id).eq('user_id', user.id)
     }
+    if (shared.length) await db.from('instagram_media_stats').upsert(shared)
     return json({ stats, needsReconnect, errors })
   } catch (e) { return json({ error: String(e) }, 500) }
 })

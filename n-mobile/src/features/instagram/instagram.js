@@ -45,3 +45,10 @@ export async function fetchInsights(items) {
   if (error || data?.error) throw new Error(data?.error || error.message)
   return data
 }
+// Çka është publikuar realisht në llogarinë e lidhur të Instagramit (edhe jashtë aplikacionit).
+// Gabimet e pritura vijnë si { error, code: 'reconnect' | 'not_connected' | 'instagram' }.
+export async function listInstagramMedia(limit = 50) {
+  const { data, error } = await supabase.functions.invoke('instagram-media', { body: { limit } })
+  if (error) throw new Error(error.message)
+  return data
+}
