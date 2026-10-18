@@ -4,7 +4,7 @@ import { themeById } from '../features/themes/themes.js'
 import { makeCaption } from '../features/editor/caption.js'
 import { loadSettings, saveSettings } from '../features/settings/settingsApi.js'
 import { savePost, listPosts, deletePost, postStatus } from '../features/posts/postsApi.js'
-import { finishInstagramLogin, getInstagramAccount, publishToInstagram, findPermalinks, igProfileUrl } from '../features/instagram/instagram.js'
+import { finishInstagramLogin, getInstagramAccount, publishToInstagram, findPermalinks, igProfileUrl, fetchInsights, hasInsightsScope } from '../features/instagram/instagram.js'
 import { LS, loadImg } from '../lib/storage.js'
 import { floodRemove, aiRemove, canFlood } from '../lib/bgRemove.js'
 import { idbPut, idbGet, idbDel, idbKeys, photoKey, blobToImg, blobToDataURL, dataURLToBlob, fetchBlob, prepPhoto } from '../lib/photoStore.js'
@@ -112,6 +112,29 @@ export default function useEditor(user) {
         const loc = localPosts(); if (loc.some((p) => links[p.id])) LS.set('posts', JSON.stringify(loc.map((p) => (links[p.id] ? { ...p, ig_permalink: links[p.id] } : p))))
       }).catch(() => {})
   }, [posts, ig, user])
+  // Instagram statistics for published posts: cached in posts.ig_stats, refreshed automatically when older
+  // than 6h (once per session) or with the refresh button. needsReconnect = token lacks the insights permission.
+  const [stats, setStats] = useState({ busy: false, needsReconnect: false, error: '' })
+  const statsAuto = useRef(false)
+  async function refreshStats(manual = true) {
+    const items = posts.filter((p) => postStatus(p) === 'posted' && p.ig_media_id).map((p) => ({ id: p.id, media_id: p.ig_media_id }))
+    if (!user || !ig || !items.length) return
+    setStats((s) => ({ ...s, busy: true, error: '' }))
+    try {
+      const r = await fetchInsights(items)
+      setPosts((list) => list.map((p) => (r.stats?.[p.id] ? { ...p, ig_stats: r.stats[p.id], ig_stats_at: r.stats[p.id].fetched_at } : p)))
+      setStats({ busy: false, needsReconnect: Boolean(r.needsReconnect), error: '' })
+      if (manual) say(r.needsReconnect ? 'Lidhe sërish Instagramin për statistikat' : 'Statistikat u përditësuan')
+    } catch (e) { setStats({ busy: false, needsReconnect: false, error: 'Statistikat nuk u ngarkuan' }); if (manual) say('Statistikat nuk u ngarkuan') }
+  }
+  useEffect(() => {
+    if (statsAuto.current || !user || !ig || postsBusy) return
+    const pub = posts.filter((p) => postStatus(p) === 'posted' && p.ig_media_id)
+    if (!pub.length) return
+    statsAuto.current = true
+    if (pub.some((p) => !p.ig_stats_at || Date.now() - Date.parse(p.ig_stats_at) > 6 * 36e5)) refreshStats(false)
+  }, [posts, ig, user, postsBusy])
+  const statsNeedReconnect = Boolean(ig) && (stats.needsReconnect || !hasInsightsScope(ig))
   // Ku të çojë "Hape në Instagram": postimi i saktë, ose profili nëse linku s'dihet
   // Only for rows published to Instagram (media id or permalink); null otherwise
   const igUrlFor = (p) => (postStatus(p) === 'posted' ? p.ig_permalink || igProfileUrl(ig?.username || contact.instagram) : null)
@@ -333,5 +356,5 @@ export default function useEditor(user) {
   const next = TABS[idx + 1]
   const preview = img && !['foto', 'template'].includes(tab)
 
-  return { bg, setBgRemoved, photoBlob: () => photoRef.current, photoMissing, opening, igUrlFor, x, setX, setXAll, img2, contact, setContact, specF, setSpecField, code, setCode, region, setRegion, noActive, setNoActive, draftId, draftState, saveDraft, newPost, caption, captionEdited, copyCaption, cta, data, download, fileName, idx, ig, igBusy, igLink, img, info, localPosts, logoImg, logoUrl, makeBlob, model, next, offer, onPhoto, posts, postsBusy, preview, price, publishDirect, ready, refreshPosts, remember, removePost, reuse, saveT, say, setCaption, setCaptionEdited, setCta, setIg, setIgBusy, setIgLink, setImg, setInfo, setLogoImg, setLogoUrl, setModel, setOffer, setPosts, setPostsBusy, setPrice, setReady, setSettings, setSpec, setSynced, setTab, setTheme, setToast, setTpl, setType, setVariant, settings, share, spec, synced, tab, th, theme, toast, tpl, type, user, variant }
+  return { stats, refreshStats, statsNeedReconnect, bg, setBgRemoved, photoBlob: () => photoRef.current, photoMissing, opening, igUrlFor, x, setX, setXAll, img2, contact, setContact, specF, setSpecField, code, setCode, region, setRegion, noActive, setNoActive, draftId, draftState, saveDraft, newPost, caption, captionEdited, copyCaption, cta, data, download, fileName, idx, ig, igBusy, igLink, img, info, localPosts, logoImg, logoUrl, makeBlob, model, next, offer, onPhoto, posts, postsBusy, preview, price, publishDirect, ready, refreshPosts, remember, removePost, reuse, saveT, say, setCaption, setCaptionEdited, setCta, setIg, setIgBusy, setIgLink, setImg, setInfo, setLogoImg, setLogoUrl, setModel, setOffer, setPosts, setPostsBusy, setPrice, setReady, setSettings, setSpec, setSynced, setTab, setTheme, setToast, setTpl, setType, setVariant, settings, share, spec, synced, tab, th, theme, toast, tpl, type, user, variant }
 }

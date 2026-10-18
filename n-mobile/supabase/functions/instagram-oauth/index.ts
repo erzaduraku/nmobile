@@ -21,7 +21,10 @@ Deno.serve(async (req) => {
     const r3 = await fetch(`${GRAPH}/me?fields=user_id,username&access_token=${l.access_token}`)
     const me = await r3.json()
     if (!r3.ok) return json({ error: 'Could not read account', details: me }, 400)
-    const { error } = await admin().from('instagram_accounts').upsert({ user_id: user.id, ig_user_id: String(me.user_id ?? s.user_id), username: me.username, access_token: l.access_token, token_expires_at: new Date(Date.now() + l.expires_in * 1000).toISOString(), updated_at: new Date().toISOString() })
+    // granted permissions (comma list), so the app knows e.g. whether statistics are allowed (migration 010)
+    const granted = s.permissions ?? s.data?.[0]?.permissions
+    const scopes = Array.isArray(granted) ? granted.join(',') : typeof granted === 'string' ? granted : null
+    const { error } = await admin().from('instagram_accounts').upsert({ user_id: user.id, ig_user_id: String(me.user_id ?? s.user_id), username: me.username, access_token: l.access_token, scopes, token_expires_at: new Date(Date.now() + l.expires_in * 1000).toISOString(), updated_at: new Date().toISOString() })
     if (error) return json({ error: error.message }, 500)
     return json({ username: me.username })
   } catch (e) { return json({ error: String(e) }, 500) }

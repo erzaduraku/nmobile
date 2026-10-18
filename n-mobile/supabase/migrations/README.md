@@ -22,3 +22,4 @@ Run each file once, in order, in the Supabase dashboard: **SQL Editor → New qu
 - `007_post_photos.sql` – `posts.photo2_path` (second product photo stored as a file in the `posts` bucket instead of a dataURL in `extra`) (applied).
 - `008_exported_status.sql` – new `posts.status` value `exported` (downloaded/shared only); old 'posted' rows without Instagram id/link become 'exported' (applied).
 - `009_photo_original.sql` – `posts.photo_orig_path` (original upload kept while the background is removed, for undo) (applied).
+- `010_instagram_insights.sql` – `posts.ig_stats` / `ig_stats_at` (cached Instagram statistics) and `instagram_accounts.scopes` (granted permissions) (applied).
