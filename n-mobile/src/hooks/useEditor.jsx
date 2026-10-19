@@ -112,6 +112,18 @@ export default function useEditor(user) {
   const [posts, setPosts] = useState([])
   const [postsBusy, setPostsBusy] = useState(false)
   const localPosts = () => { try { return JSON.parse(LS.get('posts', '[]')) } catch { return [] } }
+  // Posts deleted directly on Instagram (posts.ig_deleted_at, migration 012) are hidden everywhere; rows/photos are kept
+  const visible = (p) => !p.ig_deleted_at
+  function markIgDeleted(mediaIds) {
+    const gone = new Set((mediaIds || []).map(String)); if (!gone.size) return
+    const hit = (p) => p.ig_media_id && gone.has(String(p.ig_media_id))
+    const n = Math.max(posts.filter(hit).length, 0)
+    setPosts((list) => list.filter((p) => !hit(p)))
+    const now = new Date().toISOString(), loc = localPosts()
+    if (loc.some(hit)) writeLocal(loc.map((p) => (hit(p) ? { ...p, ig_deleted_at: now } : p)))
+    setIgFeed((f) => ({ ...f, media: f.media.filter((m) => !gone.has(String(m.id))) }))
+    if (n) say(n === 1 ? '1 postim u fshi në Instagram dhe u hoq nga lista' : `${n} postime u fshinë në Instagram dhe u hoqën nga lista`)
+  }
   async function refreshPosts() {
     setPostsBusy(true)
     try {
@@ -119,9 +131,9 @@ export default function useEditor(user) {
         // server rows + drafts that could only be saved on this device (synced on the next successful save)
         const server = await listPosts(), ids = new Set(server.map((p) => p.id))
         const pend = localPosts().filter((p) => p.pending === user.id && !ids.has(p.id))
-        setPosts([...pend, ...server].sort((a, b) => String(b.updated_at || b.created_at).localeCompare(String(a.updated_at || a.created_at))))
-      } else setPosts(localPosts().filter((p) => !p.pending))
-    } catch { setPosts(localPosts()); say('Postimet nuk u ngarkuan nga serveri') }
+        setPosts([...pend, ...server].filter(visible).sort((a, b) => String(b.updated_at || b.created_at).localeCompare(String(a.updated_at || a.created_at))))
+      } else setPosts(localPosts().filter((p) => !p.pending && visible(p)))
+    } catch { setPosts(localPosts().filter(visible)); say('Postimet nuk u ngarkuan nga serveri') }
     setPostsBusy(false)
   }
   useEffect(() => { refreshPosts() }, [user])
@@ -155,10 +167,13 @@ export default function useEditor(user) {
     if (!user || !ig) return null
     setIgFeed((f) => ({ ...f, busy: true, error: '', code: '' }))
     try {
-      const r = await listInstagramMedia()
+      // media ids of our posted rows, so the server can verify which ones were deleted on Instagram
+      const known = posts.filter((p) => postStatus(p) === 'posted' && p.ig_media_id).map((p) => String(p.ig_media_id))
+      const r = await listInstagramMedia(50, known)
       if (r.error) { setIgFeed((f) => ({ ...f, busy: false, loaded: true, error: r.error, code: r.code || 'instagram' })); return null }
       const media = r.media || []
       setIgFeed({ media, loaded: true, busy: false, error: '', code: '' })
+      if (r.deleted?.length) markIgDeleted(r.deleted)
       try { LS.set(feedKey, JSON.stringify(media)) } catch {}
       return media
     } catch (e) { setIgFeed((f) => ({ ...f, busy: false, loaded: true, error: e.message, code: 'network' })); return null }
@@ -179,6 +194,7 @@ export default function useEditor(user) {
       setIgStats((m) => ({ ...m, ...byMedia }))
       setPosts((list) => list.map((p) => (r.stats?.[p.id] ? { ...p, ig_stats: r.stats[p.id], ig_stats_at: r.stats[p.id].fetched_at } : p)))
       setStats({ busy: false, needsReconnect: Boolean(r.needsReconnect), error: '' })
+      if (r.deleted?.length) markIgDeleted(r.deleted)
       if (manual) say(r.needsReconnect ? 'Lidhe sërish Instagramin për statistikat' : 'Statistikat u përditësuan')
     } catch (e) { setStats({ busy: false, needsReconnect: false, error: 'Statistikat nuk u ngarkuan' }); if (manual) say('Statistikat nuk u ngarkuan') }
   }

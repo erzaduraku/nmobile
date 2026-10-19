@@ -48,12 +48,13 @@ Deno.serve(async (req) => {
     let needsReconnect = scopes !== '' && !scopes.includes('instagram_business_manage_insights')
     const stats: Record<string, Record<string, unknown>> = {}
     const errors: Record<string, string> = {}
+    const deleted: string[] = [] // media ids Instagram says no longer exist (deleted on Instagram)
     const list = (Array.isArray(items) ? items : []).filter((it) => it?.id && it?.media_id).slice(0, 60)
     async function one(it: { id: string; media_id: string }) {
       const mid = encodeURIComponent(String(it.media_id))
       const s: Record<string, unknown> = {}
       const f = await get(`${G}/${mid}?fields=like_count,comments_count,media_product_type,media_type,timestamp&access_token=${token}`)
-      if (!f.ok) { errors[it.id] = f.err?.message || 'media not found'; return }
+      if (!f.ok) { errors[it.id] = f.err?.message || 'media not found'; if (f.err && (f.err.code === 100 || /does not exist|cannot be loaded|unsupported get request/i.test(f.err.message || ''))) deleted.push(String(it.media_id)); return }
       s.likes = f.j.like_count ?? null; s.comments = f.j.comments_count ?? null
       s.media_product_type = f.j.media_product_type || 'FEED'; s.timestamp = f.j.timestamp || null
       if (!needsReconnect) {
@@ -83,6 +84,8 @@ Deno.serve(async (req) => {
       if (/^[0-9a-f-]{36}$/i.test(it.id)) await db.from('posts').update({ ig_stats: s, ig_stats_at: s.fetched_at }).eq('id', it.id).eq('user_id', user.id)
     }
     if (shared.length) await db.from('instagram_media_stats').upsert(shared)
-    return json({ stats, needsReconnect, errors })
+    // deleted directly on Instagram: hide the app rows (migration 012), keep rows and photos
+    if (deleted.length) await db.from('posts').update({ ig_deleted_at: new Date().toISOString() }).eq('user_id', user.id).in('ig_media_id', deleted).is('ig_deleted_at', null)
+    return json({ stats, needsReconnect, errors, deleted })
   } catch (e) { return json({ error: String(e) }, 500) }
 })

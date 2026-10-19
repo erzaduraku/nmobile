@@ -79,6 +79,7 @@ export async function fetchInsights(items) {
 }
 // Çka është publikuar realisht në llogarinë e lidhur të Instagramit (edhe jashtë aplikacionit).
 // Gabimet e pritura vijnë si { error, code: 'reconnect' | 'not_connected' | 'instagram' }.
-export async function listInstagramMedia(limit = 50) {
-  try { return await invokeFn('instagram-media', { limit }) } catch (e) { return { error: e.message, code: e.code || 'instagram' } }
+// known = media ids of the app's posted rows; the answer's `deleted` lists those deleted on Instagram
+export async function listInstagramMedia(limit = 50, known = []) {
+  try { return await invokeFn('instagram-media', { limit, known }) } catch (e) { return { error: e.message, code: e.code || 'instagram' } }
 }

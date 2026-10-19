@@ -24,3 +24,4 @@ Run each file once, in order, in the Supabase dashboard: **SQL Editor → New qu
 - `009_photo_original.sql` – `posts.photo_orig_path` (original upload kept while the background is removed, for undo) (applied).
 - `010_instagram_insights.sql` – `posts.ig_stats` / `ig_stats_at` (cached Instagram statistics) and `instagram_accounts.scopes` (granted permissions) (applied).
 - `011_instagram_shared.sql` – index on `instagram_accounts.ig_user_id` (same Instagram account on several app logins is allowed) and `instagram_media_stats` (statistics per Instagram media, server-only) (applied).
+- `012_ig_deleted.sql` – `posts.ig_deleted_at` (post deleted directly on Instagram; hidden in the app, row kept) (applied).
