@@ -1,5 +1,11 @@
 ﻿{
-  "mssql.intelliSense.enableErrorChecking": false,
-  "mssql.intelliSense.enableSuggestions": false,
-  "files.associations": { "*.sql": "postgres" }
+    "mssql.intelliSense.enableErrorChecking":  false,
+    "mssql.intelliSense.enableSuggestions":  false,
+    "files.associations":  {
+                               "*.sql":  "postgres"
+                           },
+    "deno.enablePaths":  [
+                             "n-mobile/supabase/functions"
+                         ],
+    "deno.lint":  true
 }

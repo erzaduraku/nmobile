@@ -21,13 +21,13 @@ const STEP_VIEW = { foto: PhotoTab, template: TemplateTab, tema: ThemeTab, detaj
 // Inside the editor: step header with back + progress, live preview, sticky "Vazhdo" action.
 export default function Editor({ user }) {
   const base = useEditor(user)
-  const [screen, setScreen] = useState('home')
+  // back from the Instagram login (?code or ?error): open Settings, where the connection result is shown
+  const [screen, setScreen] = useState(() => (/[?&](code|error)=/.test(location.search) ? 'settings' : 'home'))
   const [zoom, setZoom] = useState(null) // { src } kur pamja e madhe është hapur; src null = duke u gatuar
   const { tab, setTab, img, type, tpl, th, data, ready, preview, logoUrl, toast, onPhoto, reuse, refreshPosts, makeBlob } = base
   // Photos are loaded before the editor opens, so it never shows a half-restored draft
   const ed = { ...base, reuse: async (p) => { await reuse(p); setScreen('editor') } }
   useEffect(() => { if (screen !== 'editor') refreshPosts() }, [screen])
-  useEffect(() => { if (new URLSearchParams(location.search).has('code')) setScreen('settings') }, [])
 
   const i = STEPS.findIndex((s) => s.id === tab), step = STEPS[i], next = STEPS[i + 1]
   // Pamja e madhe: render në madhësi të plotë (1080×1350 / 1080×1920) që teksti të jetë i qartë.

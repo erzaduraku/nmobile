@@ -76,7 +76,7 @@ export default function useEditor(user) {
   const [igLink, setIgLink] = useState('')
   useEffect(() => {
     if (!user) return
-    finishInstagramLogin().then((r) => { if (r) say('Instagrami u lidh: @' + r.username) }).catch((e) => say(e.message)).finally(() => getInstagramAccount().then(setIg).catch(() => {}))
+    finishInstagramLogin().then((r) => { if (r) say(r.missingInsights ? `Instagrami u lidh (@${r.username}), por pa lejen për statistikat – shtoje te Meta dhe lidhe sërish` : 'Instagrami u lidh: @' + r.username) }).catch((e) => say('Lidhja e Instagramit dështoi: ' + e.message)).finally(() => getInstagramAccount().then(setIg).catch(() => {}))
   }, [user])
   // The design currently open is already on Instagram: { id (post row), ig_media_id, permalink } or null.
   // Set after a successful direct publish and when a posted row is reopened; cleared by real edits / a new post.
@@ -379,7 +379,8 @@ export default function useEditor(user) {
     draftT.current = setTimeout(() => { if (dirty.current) saveDraft(true) }, 2500)
   }, [img, model, price, offer, spec, info, cta, code, region, noActive, x, tpl, type, theme])
 
-  function say(m) { setToast(m); setTimeout(() => setToast(''), 2600) }
+  const toastT = useRef(null)
+  function say(m) { setToast(m); clearTimeout(toastT.current); toastT.current = setTimeout(() => setToast(''), Math.min(9000, Math.max(2600, String(m).length * 60))) }
   // Picked product photo: downscaled once (max 1600 px, PNG kept if transparent) and kept as a Blob,
   // so drafts store exactly what the editor shows.
   // Solid/gradient backgrounds (any colour) are removed automatically with the fast flood fill;
