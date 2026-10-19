@@ -34,7 +34,11 @@ export function friendlyError(j, status, fallback) {
   return fallback && !/non-2xx/i.test(fallback) ? fallback : 'Diçka shkoi keq. Provo sërish.'
 }
 export function startInstagramLogin() {
-  const state = crypto.randomUUID(); sessionStorage.setItem('nm_ig_state', state)
+  // The redirect comes back to IG_REDIRECT; the state must be stored on that same site (origin)
+  const back = new URL(IG_REDIRECT, location.href).origin
+  if (back !== location.origin) { alert(`Për ta lidhur Instagramin, hape aplikacionin te ${back.replace(/^https?:\/\//, '')}`); return }
+  // localStorage (not sessionStorage): it survives when Instagram returns in a new tab or from the PWA
+  const state = crypto.randomUUID(); localStorage.setItem('nm_ig_state', state)
   const q = new URLSearchParams({ client_id: IG_APP_ID, redirect_uri: IG_REDIRECT, response_type: 'code', scope: IG_SCOPES, state })
   location.href = 'https://www.instagram.com/oauth/authorize?' + q
 }
@@ -49,8 +53,11 @@ export async function finishInstagramLogin() {
     if (/denied|cancel/i.test(err + reason)) throw new Error('Lidhja e Instagramit u anulua.')
     throw new Error(friendlyError({ error: `${err} ${reason} ${desc}` }, 400))
   }
-  if (state !== sessionStorage.getItem('nm_ig_state')) throw new Error('Lidhja e Instagramit u anulua (state i pavlefshëm)')
-  sessionStorage.removeItem('nm_ig_state') // a code can be exchanged only once (also protects against a double call)
+  const saved = localStorage.getItem('nm_ig_state') || sessionStorage.getItem('nm_ig_state')
+  // Instagram can append '#_' to the redirect; compare without it. Only reject a real mismatch
+  // (a missing saved state, e.g. login finished in another tab, is allowed: the exchange still needs the user's session).
+  if (saved && (state || '').replace(/#_$/, '') !== saved) throw new Error('Lidhja e Instagramit u anulua (state i pavlefshëm). Provo sërish.')
+  localStorage.removeItem('nm_ig_state'); sessionStorage.removeItem('nm_ig_state') // a code can be exchanged only once (also protects against a double call)
   return invokeFn('instagram-oauth', { code })
 }
 export async function getInstagramAccount() {
