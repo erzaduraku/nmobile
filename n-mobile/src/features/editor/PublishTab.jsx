@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Send, Download, Copy, Shuffle, Loader2, Zap as Instagram, ExternalLink, CheckCircle2, Repeat, Undo2, AlignLeft, ListChecks, BadgePercent, MessageCircleQuestion, Briefcase, List, Tag, Phone, Hash } from 'lucide-react'
+import Modal from '../../components/ui/Modal.jsx'
 import { CAPTION_STYLES, HASHTAG_SETS, IG_MAX_CHARS, IG_MAX_TAGS, countTags } from './caption.js'
 
 const STYLE_ICON = { short: AlignLeft, detailed: ListChecks, offer: BadgePercent, question: MessageCircleQuestion, pro: Briefcase, bullets: List }
@@ -61,16 +62,10 @@ export default function PublishTab({ ed }) {
               <p className="text-xs text-neutral-500 -mt-2">{over ? 'Instagrami lejon deri në 2200 shkronja dhe 30 hashtag. Shkurtoje tekstin.' : 'Mund ta ndryshosh tekstin. Ky tekst kopjohet, postohet dhe ruhet me postimin.'}</p>
             </div>
             {again && (
-              <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-4" onClick={() => setAgain(false)}>
-                <div className="w-full max-w-sm rounded-2xl bg-white p-4" onClick={(e) => e.stopPropagation()}>
-                  <div className="font-extrabold">Ta postosh prapë?</div>
-                  <p className="text-sm text-neutral-500 mt-1">Ky postim është tashmë në Instagram. Nëse vazhdon, do të dalë edhe një herë si postim i ri.</p>
-                  <div className="grid gap-2 mt-4">
-                    <button className="rounded-xl bg-brand text-white text-sm font-bold py-2 flex items-center justify-center gap-1" onClick={() => { setAgain(false); publishDirect(true) }}><Repeat size={15} /> Po, posto prapë</button>
-                    <button className="rounded-xl bg-neutral-100 text-sm font-bold py-2" onClick={() => setAgain(false)}>Anulo</button>
-                  </div>
-                </div>
-              </div>
+              <Modal title="Ta postosh prapë?" text="Ky postim është tashmë në Instagram. Nëse vazhdon, do të dalë edhe një herë si postim i ri." onClose={() => setAgain(false)}>
+                <button className="rounded-xl bg-brand text-white text-sm font-bold py-2 flex items-center justify-center gap-1" onClick={() => { setAgain(false); publishDirect(true) }}><Repeat size={15} /> Po, posto prapë</button>
+                <button className="rounded-xl bg-neutral-100 text-sm font-bold py-2" onClick={() => setAgain(false)}>Anulo</button>
+              </Modal>
             )}
           </div>
   )

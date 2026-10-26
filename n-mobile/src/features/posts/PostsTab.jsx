@@ -4,6 +4,7 @@ import { pickPromote } from './promote.js'
 import { startInstagramLogin } from '../instagram/instagram.js'
 import { postStatus } from './postsApi.js'
 import ImageLightbox from '../../components/ui/ImageLightbox.jsx'
+import Modal from '../../components/ui/Modal.jsx'
 
 // Exported (downloaded/shared only) posts are listed under 'Të gjitha' only; 'Të postuara' = published to Instagram.
 const SEG = [['all', 'Të gjitha'], ['draft', 'Draftet'], ['posted', 'Të postuara']]
@@ -20,6 +21,20 @@ function StatsGrid({ s }) {
 }
 const KIND = (p) => (p.ig?.media_product_type === 'STORY' ? 'Story' : p.ig?.media_product_type === 'REELS' || p.ig?.media_type === 'VIDEO' ? 'Reel' : p.ig?.media_type === 'CAROUSEL_ALBUM' ? 'Album' : 'Postim')
 const BADGE = { draft: ['Draft', 'bg-amber-400 text-neutral-900'], posted: ['Postuar', 'bg-green-600 text-white'], exported: ['Shkarkuar', 'bg-white/90 text-neutral-800'] }
+
+// Amber "reconnect Instagram" notice (expired link or missing statistics permission)
+function ReconnectNotice({ title, text }) {
+  return (
+    <div className="mb-4 rounded-2xl border-2 border-amber-300 bg-amber-50 p-3 flex items-start gap-2">
+      <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-bold">{title}</div>
+        <p className="text-xs text-neutral-600 mt-0.5">{text}</p>
+        <button onClick={startInstagramLogin} className="mt-2 rounded-xl bg-brand text-white text-xs font-bold px-3 py-1.5 flex items-center gap-1"><Link2 size={14} /> Lidhe sërish</button>
+      </div>
+    </div>
+  )
+}
 
 export default function PostsTab({ ed }) {
   const { postsView: posts, postsBusy, removePost, reuse, user, igUrlFor, opening, ig, stats, statsNeedReconnect, igFeed, refreshInstagram } = ed
@@ -54,14 +69,7 @@ export default function PostsTab({ ed }) {
         </div>
       )}
       {canStats && igFeed.code === 'reconnect' && (
-        <div className="mb-4 rounded-2xl border-2 border-amber-300 bg-amber-50 p-3 flex items-start gap-2">
-          <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-bold">Lidhja me Instagramin ka skaduar</div>
-            <p className="text-xs text-neutral-600 mt-0.5">Lidhe sërish që të shfaqen postimet nga Instagrami.</p>
-            <button onClick={startInstagramLogin} className="mt-2 rounded-xl bg-brand text-white text-xs font-bold px-3 py-1.5 flex items-center gap-1"><Link2 size={14} /> Lidhe sërish</button>
-          </div>
-        </div>
+        <ReconnectNotice title="Lidhja me Instagramin ka skaduar" text="Lidhe sërish që të shfaqen postimet nga Instagrami." />
       )}
       {canStats && igFeed.error && igFeed.code !== 'reconnect' && (
         <div className="mb-4 rounded-2xl border-2 border-neutral-200 bg-neutral-50 p-3 flex items-center gap-2 text-sm">
@@ -72,14 +80,7 @@ export default function PostsTab({ ed }) {
       )}
       {canStats && igFeed.busy && !igFeed.media.length && f !== 'draft' && <div className="mb-3 text-xs text-neutral-500 flex items-center gap-1.5"><Loader2 size={14} className="animate-spin text-brand" /> Po ngarkohen postimet nga Instagrami…</div>}
       {canStats && statsNeedReconnect && igFeed.code !== 'reconnect' && (
-        <div className="mb-4 rounded-2xl border-2 border-amber-300 bg-amber-50 p-3 flex items-start gap-2">
-          <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-bold">Lidhe sërish Instagramin për statistikat</div>
-            <p className="text-xs text-neutral-600 mt-0.5">Për shikimet, arritjen, ruajtjet dhe ndarjet duhet leje e re nga Instagrami.</p>
-            <button onClick={startInstagramLogin} className="mt-2 rounded-xl bg-brand text-white text-xs font-bold px-3 py-1.5 flex items-center gap-1"><Link2 size={14} /> Lidhe sërish</button>
-          </div>
-        </div>
+        <ReconnectNotice title="Lidhe sërish Instagramin për statistikat" text="Për shikimet, arritjen, ruajtjet dhe ndarjet duhet leje e re nga Instagrami." />
       )}
       {promoPost && f !== 'draft' && (
         <div className="mb-4 rounded-2xl border-2 border-brand bg-brand-soft p-3 flex gap-3 items-center">
@@ -125,19 +126,13 @@ export default function PostsTab({ ed }) {
       </div>
       {zoom && <ImageLightbox src={zoom} alt="Postimi" onClose={() => setZoom(null)} />}
       {del && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-4" onClick={() => setDel(null)}>
-          <div className="w-full max-w-sm rounded-2xl bg-white p-4" onClick={(e) => e.stopPropagation()}>
-            <div className="font-extrabold">{st(del) === 'draft' ? 'Fshi draftin?' : 'Fshi postimin?'}</div>
-            <p className="text-sm text-neutral-500 mt-1">{st(del) === 'posted' ? 'Fshihet vetëm nga aplikacioni. Në Instagram mbetet; hape në Instagram për ta fshirë atje.' : st(del) === 'exported' ? 'Fshihet nga aplikacioni. Fotoja e shkarkuar në pajisje mbetet.' : 'Drafti fshihet përgjithmonë.'}</p>
-            <div className="grid gap-2 mt-4">
-              {st(del) === 'posted' && igUrlFor(del) && (
-                <a href={igUrlFor(del)} target="_blank" rel="noopener noreferrer" className="rounded-xl border-2 border-neutral-200 text-sm font-bold py-2 flex items-center justify-center gap-1"><ExternalLink size={15} /> Hape në Instagram</a>
-              )}
-              <button className="rounded-xl bg-red-600 text-white text-sm font-bold py-2 flex items-center justify-center gap-1" onClick={() => { removePost(del); setDel(null) }}><Trash2 size={15} /> {st(del) === 'posted' ? 'Fshi nga aplikacioni' : 'Fshi'}</button>
-              <button className="rounded-xl bg-neutral-100 text-sm font-bold py-2" onClick={() => setDel(null)}>Anulo</button>
-            </div>
-          </div>
-        </div>
+        <Modal title={st(del) === 'draft' ? 'Fshi draftin?' : 'Fshi postimin?'} text={st(del) === 'posted' ? 'Fshihet vetëm nga aplikacioni. Në Instagram mbetet; hape në Instagram për ta fshirë atje.' : st(del) === 'exported' ? 'Fshihet nga aplikacioni. Fotoja e shkarkuar në pajisje mbetet.' : 'Drafti fshihet përgjithmonë.'} onClose={() => setDel(null)}>
+          {st(del) === 'posted' && igUrlFor(del) && (
+            <a href={igUrlFor(del)} target="_blank" rel="noopener noreferrer" className="rounded-xl border-2 border-neutral-200 text-sm font-bold py-2 flex items-center justify-center gap-1"><ExternalLink size={15} /> Hape në Instagram</a>
+          )}
+          <button className="rounded-xl bg-red-600 text-white text-sm font-bold py-2 flex items-center justify-center gap-1" onClick={() => { removePost(del); setDel(null) }}><Trash2 size={15} /> {st(del) === 'posted' ? 'Fshi nga aplikacioni' : 'Fshi'}</button>
+          <button className="rounded-xl bg-neutral-100 text-sm font-bold py-2" onClick={() => setDel(null)}>Anulo</button>
+        </Modal>
       )}
     </div>
   )

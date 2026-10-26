@@ -13,6 +13,9 @@ import DetailsTab from '../features/editor/DetailsTab.jsx'
 import PublishTab from '../features/editor/PublishTab.jsx'
 import PostsTab from '../features/posts/PostsTab.jsx'
 import HomePage from '../features/posts/HomePage.jsx'
+
+// Round header button (back / close)
+const ROUND_BTN = 'w-11 h-11 rounded-full bg-neutral-100 grid place-items-center'
 import SettingsPage from '../features/settings/SettingsPage.jsx'
 
 const STEP_VIEW = { foto: PhotoTab, template: TemplateTab, tema: ThemeTab, detajet: DetailsTab, posto: PublishTab }
@@ -48,9 +51,9 @@ export default function Editor({ user }) {
       <div className="min-h-full max-w-lg mx-auto flex flex-col">
         <header className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-neutral-100 px-3 pt-3 pb-2">
           <div className="flex items-center gap-2">
-            <button onClick={back} className="w-11 h-11 rounded-full bg-neutral-100 grid place-items-center" aria-label="Kthehu"><ArrowLeft size={22} /></button>
+            <button onClick={back} className={ROUND_BTN} aria-label="Kthehu"><ArrowLeft size={22} /></button>
             <div className="flex-1 text-center"><div className="text-xs text-neutral-500 font-semibold">Hapi {i + 1} nga {STEPS.length}</div><div className="font-extrabold text-lg leading-tight">{step.name}</div></div>
-            <button onClick={() => setScreen('home')} className="w-11 h-11 rounded-full bg-neutral-100 grid place-items-center" aria-label="Mbyll"><X size={22} /></button>
+            <button onClick={() => setScreen('home')} className={ROUND_BTN} aria-label="Mbyll"><X size={22} /></button>
           </div>
           <div className="flex gap-1.5 mt-3">
             {STEPS.map((s, k) => <button key={s.id} disabled={!img} onClick={() => setTab(s.id)} className={`h-1.5 flex-1 rounded-full ${k <= i ? 'bg-brand' : 'bg-neutral-200'}`} aria-label={s.name} />)}

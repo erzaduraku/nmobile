@@ -8,13 +8,12 @@ export const LS = {
 export const loadImg = (src) => new Promise((res, rej) => { const i = new Image(); if (/^https?:/i.test(src)) i.crossOrigin = 'anonymous'; i.onload = () => res(i); i.onerror = rej; i.src = src })
 export const readFile = (f) => new Promise((res) => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(f) })
 // Downscales an image (used for the custom logo kept in localStorage / DB)
-export async function shrink(dataUrl, max = 600) {
+// Draws the image scaled down to at most `max` px on its longest side (optional background fill)
+async function scaled(dataUrl, max, fill) {
   const img = await loadImg(dataUrl); const k = Math.min(1, max / Math.max(img.width, img.height))
   const c = document.createElement('canvas'); c.width = img.width * k; c.height = img.height * k
-  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); return c.toDataURL('image/png')
+  const x = c.getContext('2d'); if (fill) { x.fillStyle = fill; x.fillRect(0, 0, c.width, c.height) }
+  x.drawImage(img, 0, 0, c.width, c.height); return c
 }
-export async function shrinkJpeg(dataUrl, max = 1400) {
-  const img = await loadImg(dataUrl); const k = Math.min(1, max / Math.max(img.width, img.height))
-  const c = document.createElement('canvas'); c.width = img.width * k; c.height = img.height * k
-  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0, c.width, c.height); return c.toDataURL('image/jpeg', 0.88)
-}
+export const shrink = async (dataUrl, max = 600) => (await scaled(dataUrl, max)).toDataURL('image/png')
+export const shrinkJpeg = async (dataUrl, max = 1400) => (await scaled(dataUrl, max, '#fff')).toDataURL('image/jpeg', 0.88)
