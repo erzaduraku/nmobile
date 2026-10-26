@@ -183,11 +183,11 @@ export function makeCaption(f = {}, themeId = 'standard', v = 0, opts = {}) {
   if (o.tags !== 'none') {
     const brand = BRANDS.filter(([r]) => r.test(m)).flatMap(([, x]) => x)
     const modelTag = tagify(m).length > 3 ? tagify(m) : ''
-    tags = ['#nmobile', brand[0], modelTag, '#telefona', '#prishtina', '#kosova']
+    tags = ['#nmobile', brand[0], modelTag, '#telefona', '#prizren', '#kosova']
     if (style === 'offer' || old || offer) tags.push('#oferta', '#zbritje')
     if (o.tags === 'extended') {
       tags.push(...brand.slice(1), ...(COND[cond] || []), ...(th.tags || []), storage && tagify(storage),
-        '#smartphone', '#telefonaprishtine', '#mobileshop', '#teknologji', '#prishtine', '#kosovo', '#shqiperi', '#albania')
+        '#smartphone', '#telefonaprizren', '#mobileshop', '#teknologji', '#prizreni', '#kosovo', '#shqiperi', '#albania')
     }
     tags = [...new Set(tags.filter((x) => x && x.length > 2))].slice(0, IG_MAX_TAGS)
   }
