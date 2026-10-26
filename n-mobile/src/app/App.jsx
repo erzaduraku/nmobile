@@ -1,11 +1,14 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import Logo from '../components/ui/Logo.jsx'
 import Auth from '../features/auth/Auth.jsx'
 import NewPassword from '../features/auth/NewPassword.jsx'
 import { supabase, supabaseReady } from '../lib/supabase.js'
 import { LS } from '../lib/storage.js'
-import Editor from './Editor.jsx'
+import Spinner from '../components/ui/Spinner.jsx'
+
+// The editor (templates, canvas, Instagram) is downloaded only after login
+const Editor = lazy(() => import('./Editor.jsx'))
 
 // Entry gate: splash -> (missing config notice | login | editor)
 export default function App() {
@@ -35,7 +38,7 @@ export default function App() {
     </div>
   )
   if (supabaseReady && !session) return <Auth />
-  return <>{recovery && <NewPassword done={() => setRecovery(false)} />}<Editor user={session?.user || null} /></>
+  return <>{recovery && <NewPassword done={() => setRecovery(false)} />}<Suspense fallback={<Spinner full />}><Editor user={session?.user || null} /></Suspense></>
 }
 
 // ---------- Redaktori me tabs ----------

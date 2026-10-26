@@ -36,8 +36,7 @@ export default function PublishTab({ ed }) {
               <button className="btn-light flex items-center justify-center gap-2" onClick={() => copyCaption()}><Copy size={20} /> Kopjo caption</button>
             </div>
             <div className="pt-3 space-y-3">
-              <div className="flex items-center justify-between"><span className="label !mb-0">Caption</span>
-                <button className="text-brand font-bold text-sm py-1 flex items-center gap-1" onClick={() => regen(null, true)}><Shuffle size={16} /> Gjenero tjetër</button></div>
+              <span className="label !mb-0">Caption</span>
               <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Stili i caption-it">
                 {CAPTION_STYLES.map((st) => { const I = STYLE_ICON[st.id], on = capOpts.style === st.id; return (
                   <button key={st.id} role="radio" aria-checked={on} onClick={() => regen({ style: st.id })} className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-bold border-2 ${on ? 'bg-brand border-brand text-white' : 'border-neutral-200 text-neutral-700'}`}><I size={15} /> {st.name}</button>) })}
@@ -53,6 +52,7 @@ export default function PublishTab({ ed }) {
                   {HASHTAG_SETS.map(([id, l]) => <button key={id} onClick={() => regen({ tags: id })} className={`rounded-lg py-1.5 text-sm font-bold ${capOpts.tags === id ? 'bg-white shadow text-neutral-900' : 'text-neutral-500'}`}>{l}</button>)}
                 </div>
               </div>
+              <div className="flex justify-end -mb-2"><button className="text-brand font-bold text-sm py-1 flex items-center gap-1" onClick={() => regen(null, true)}><Shuffle size={16} /> Gjenero tjetër</button></div>
               <textarea className="field text-base leading-snug" rows={Math.min(26, Math.max(8, caption.split("\n").length + 5))} value={caption} onChange={(e) => { setCaption(e.target.value); setCaptionEdited(true) }} aria-label="Caption" />
               <div className="flex items-center justify-between text-xs -mt-1">
                 <span className={over ? 'text-red-600 font-bold' : 'text-neutral-500'}>{len}/{IG_MAX_CHARS} shkronja · {tags}/{IG_MAX_TAGS} hashtag</span>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { ArrowLeft, ChevronRight, X, Maximize2 } from 'lucide-react'
 import Logo from '../components/ui/Logo.jsx'
 import PostCanvas from '../components/ui/PostCanvas.jsx'
@@ -6,17 +6,20 @@ import ImageLightbox from '../components/ui/ImageLightbox.jsx'
 import { TEMPLATES } from '../features/templates/index.js'
 import useEditor from '../hooks/useEditor.jsx'
 import { TABS as STEPS, NAV } from './tabs.js'
-import PhotoTab from '../features/editor/PhotoTab.jsx'
-import TemplateTab from '../features/editor/TemplateTab.jsx'
-import ThemeTab from '../features/themes/ThemeTab.jsx'
-import DetailsTab from '../features/editor/DetailsTab.jsx'
-import PublishTab from '../features/editor/PublishTab.jsx'
-import PostsTab from '../features/posts/PostsTab.jsx'
 import HomePage from '../features/posts/HomePage.jsx'
+import Spinner from '../components/ui/Spinner.jsx'
+
+// Screens and editor steps are split into their own chunks (loaded when first opened)
+const PhotoTab = lazy(() => import('../features/editor/PhotoTab.jsx'))
+const TemplateTab = lazy(() => import('../features/editor/TemplateTab.jsx'))
+const ThemeTab = lazy(() => import('../features/themes/ThemeTab.jsx'))
+const DetailsTab = lazy(() => import('../features/editor/DetailsTab.jsx'))
+const PublishTab = lazy(() => import('../features/editor/PublishTab.jsx'))
+const PostsTab = lazy(() => import('../features/posts/PostsTab.jsx'))
+const SettingsPage = lazy(() => import('../features/settings/SettingsPage.jsx'))
 
 // Round header button (back / close)
 const ROUND_BTN = 'w-11 h-11 rounded-full bg-neutral-100 grid place-items-center'
-import SettingsPage from '../features/settings/SettingsPage.jsx'
 
 const STEP_VIEW = { foto: PhotoTab, template: TemplateTab, tema: ThemeTab, detajet: DetailsTab, posto: PublishTab }
 
@@ -68,7 +71,7 @@ export default function Editor({ user }) {
             <p className="text-center text-xs text-neutral-500 mt-2">{TEMPLATES.find((t) => t.id === tpl).name} · {th.name} · {type === 'post' ? 'Post' : 'Story'}</p>
           </div>
         )}
-        <main className="flex-1 p-4 pb-28"><View ed={ed} /></main>
+        <main className="flex-1 p-4 pb-28"><Suspense fallback={<Spinner />}><View ed={ed} /></Suspense></main>
         {next && img && (
           <div className="fixed bottom-0 inset-x-0 z-20 bg-white/95 backdrop-blur border-t border-neutral-100 p-3" style={{ paddingBottom: 'calc(12px + env(safe-area-inset-bottom))' }}>
             <div className="max-w-lg mx-auto"><button className="btn-red flex items-center justify-center gap-2" onClick={() => setTab(next.id)}>Vazhdo: {next.name} <ChevronRight size={22} /></button></div>
@@ -85,8 +88,10 @@ export default function Editor({ user }) {
       <header className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-neutral-100 px-4 py-3 flex justify-center"><Logo size={32} custom={logoUrl} /></header>
       <main className="flex-1 p-4">
         {screen === 'home' && <HomePage ed={ed} onPhoto={startNew} openPosts={() => setScreen('posts')} openEditor={() => setScreen('editor')} openSettings={() => setScreen('settings')} />}
-        {screen === 'posts' && <PostsTab ed={ed} />}
-        {screen === 'settings' && <SettingsPage ed={ed} />}
+        <Suspense fallback={<Spinner />}>
+          {screen === 'posts' && <PostsTab ed={ed} />}
+          {screen === 'settings' && <SettingsPage ed={ed} />}
+        </Suspense>
       </main>
       <nav className="fixed bottom-0 inset-x-0 z-20 bg-white border-t border-neutral-200" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <div className="max-w-lg mx-auto grid grid-cols-3">

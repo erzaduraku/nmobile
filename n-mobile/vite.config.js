@@ -3,6 +3,19 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      output: {
+        // vendor libraries in their own long-cached chunks (app updates don't re-download them)
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'react'
+          if (id.includes('@supabase')) return 'supabase'
+          if (id.includes('lucide-react')) return 'icons'
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     VitePWA({

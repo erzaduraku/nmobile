@@ -16,12 +16,11 @@ import '@fontsource/inter/500.css'
 import '@fontsource/inter/600.css'
 import './index.css'
 import App from './app/App.jsx'
-import { renderTo, fontsReady, TEMPLATES } from './features/templates/index.js'
-import { THEMES } from './features/themes/themes.js'
-import { drawLogo, drawMark } from './lib/canvas/draw.js'
 
 // Hook për testim automatik (render i templates në headless browser)
 if (location.search.includes('test')) {
-  window.__nm = { renderTo, fontsReady, TEMPLATES, THEMES, drawLogo, drawMark }
+  // loaded on demand so the templates are not part of the first download
+  Promise.all([import('./features/templates/index.js'), import('./features/themes/themes.js'), import('./lib/canvas/draw.js')])
+    .then(([{ renderTo, fontsReady, TEMPLATES }, { THEMES }, { drawLogo, drawMark }]) => { window.__nm = { renderTo, fontsReady, TEMPLATES, THEMES, drawLogo, drawMark } })
 }
 createRoot(document.getElementById('root')).render(<App />)
