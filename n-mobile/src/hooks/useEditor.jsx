@@ -3,7 +3,7 @@ import { renderTo, fontsReady } from '../features/templates/index.js'
 import { themeById } from '../features/themes/themes.js'
 import { makeCaption, DEFAULT_CAPTION_OPTS, IG_MAX_CHARS, IG_MAX_TAGS, countTags } from '../features/editor/caption.js'
 import { loadSettings, saveSettings } from '../features/settings/settingsApi.js'
-import { savePost, listPosts, deletePost, postStatus } from '../features/posts/postsApi.js'
+import { savePost, listPosts, deletePost, postStatus, MAX_DRAFTS } from '../features/posts/postsApi.js'
 import { mergeIgFeed } from '../features/posts/igFeed.js'
 import { finishInstagramLogin, getInstagramAccount, publishToInstagram, findPermalinks, igProfileUrl, fetchInsights, hasInsightsScope, listInstagramMedia } from '../features/instagram/instagram.js'
 import { LS, loadImg } from '../lib/storage.js'
@@ -22,7 +22,7 @@ export default function useEditor(user) {
   const [imgOrig, setImgOrig] = useState(null)
   const [type, setType] = useState('post')
   const [tpl, setTpl] = useState('hero')
-  const [theme, setTheme] = useState(LS.get('theme', 'standard'))
+  const [theme, setTheme] = useState('standard')
   const [model, setModel] = useState('')
   const [price, setPrice] = useState('')
   const [offer, setOffer] = useState('')
@@ -227,7 +227,7 @@ export default function useEditor(user) {
   }
   function saveLocalRow(row) {
     const all = [row, ...localPosts().filter((p) => p.id !== row.id)]
-    const keep = new Set(all.filter((p) => p.status === 'draft').slice(0, 15).map((p) => p.id))
+    const keep = new Set(all.filter((p) => p.status === 'draft').slice(0, MAX_DRAFTS).map((p) => p.id))
     const out = all.filter((p) => p.status !== 'draft' || keep.has(p.id)).slice(0, 40)
     const ok = writeLocal(out)
     const ids = new Set(out.map((p) => p.id))
@@ -333,7 +333,7 @@ export default function useEditor(user) {
     setPublished(null); setIgLink('')
     idRef.current = null; pathsRef.current = {}; photoRef.current = { blob: null, orig: null, dirty: false }; photo2Saved.current = ''; setImgOrig(null)
     setBg({ removed: false, smooth: false, busy: '', progress: 0 })
-    setDraftId(null); setDraftState(''); setPhotoMissing(false); setModel(''); setPrice(''); setOffer(''); setSpec(''); setXAll(EMPTY_X); setCode(''); setRegion(''); setNoActive(false); setCaptionEdited(false); dirty.current = false
+    setDraftId(null); setDraftState(''); setPhotoMissing(false); setTheme('standard'); setTpl('hero'); setModel(''); setPrice(''); setOffer(''); setSpec(''); setXAll(EMPTY_X); setCode(''); setRegion(''); setNoActive(false); setCaptionEdited(false); dirty.current = false
   }
   async function removePost(p) {
     if (user && !p.pending) { try { await deletePost(p) } catch { say('Fshirja dështoi'); return } }
@@ -356,7 +356,6 @@ export default function useEditor(user) {
   }, [])
 
   useEffect(() => { fontsReady().then(() => setReady(true)) }, [])
-  useEffect(() => { LS.set('theme', theme) }, [theme])
   useEffect(() => { LS.set('info', info); LS.set('cta', cta) }, [info, cta])
   useEffect(() => { if (logoUrl) loadImg(logoUrl).then(setLogoImg).catch(() => setLogoImg(null)); else setLogoImg(null) }, [logoUrl])
 

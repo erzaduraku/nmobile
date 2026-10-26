@@ -54,7 +54,7 @@ export default function PostsTab({ ed }) {
         <h2 className="text-lg font-extrabold">Postimet e mia</h2>
         {canStats && <button onClick={() => refreshInstagram()} disabled={busy} className="rounded-xl border-2 border-neutral-200 text-xs font-bold px-2.5 py-1.5 flex items-center gap-1 text-neutral-700 disabled:opacity-60"><RefreshCw size={14} className={busy ? 'animate-spin' : ''} /> Rifresko statistikat</button>}
       </div>
-      <p className="text-sm text-neutral-500 mb-3">{user ? 'Ruhen në llogarinë tënde.' : 'Ruhen vetëm në këtë pajisje.'} Draftet ruhen vetë gjatë punës.</p>
+      <p className="text-sm text-neutral-500 mb-3">{user ? 'Ruhen në llogarinë tënde.' : 'Ruhen vetëm në këtë pajisje.'} Draftet ruhen vetë gjatë punës (deri 5; kur shtohet i ri, fshihet më i vjetri).</p>
       <div className="grid grid-cols-3 gap-1 p-1 rounded-2xl bg-neutral-100 mb-4">
         {SEG.map(([id, l]) => (
           <button key={id} onClick={() => setF(id)} className={`rounded-xl py-2 text-sm font-bold flex items-center justify-center gap-1.5 ${f === id ? 'bg-white shadow text-neutral-900' : 'text-neutral-500'}`}>
