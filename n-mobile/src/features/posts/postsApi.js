@@ -15,16 +15,20 @@ const ver = () => Date.now().toString(36)
 // Storage paths a post row can reference
 const FILE_COLS = ['image_path', 'photo_path', 'photo2_path', 'photo_orig_path']
 const filesOf = (p) => FILE_COLS.map((c) => p[c]).filter(Boolean)
-// At most this many drafts per user (first in, first out); migration 013 enforces it in the DB too
-export const MAX_DRAFTS = 5
+import { MAX_DRAFTS, MAX_POSTED } from './limits.js'
+export { MAX_DRAFTS, MAX_POSTED }
 
 /* Before draft `id` is saved: removes the user's oldest drafts (by created_at) beyond MAX_DRAFTS,
    files first, then rows, so no Storage file is left without its row. */
-async function pruneDrafts(uid, id) {
+async function pruneDrafts(uid, id) { await pruneOldest(uid, id, 'draft', 'created_at', MAX_DRAFTS) }
+/* Same for published posts: keeps the MAX_POSTED newest (by updated_at = when it was posted;
+   posted rows are final). Only app rows and their photos are removed, never anything on Instagram. */
+async function prunePosted(uid, id) { await pruneOldest(uid, id, 'posted', 'updated_at', MAX_POSTED) }
+async function pruneOldest(uid, id, status, orderCol, max) {
   const { data, error } = await supabase.from('posts').select(['id', ...FILE_COLS].join(', '))
-    .eq('user_id', uid).eq('status', 'draft').neq('id', id).order('created_at', { ascending: false })
+    .eq('user_id', uid).eq('status', status).neq('id', id).order(orderCol, { ascending: false })
   if (error || !data) return
-  const old = data.slice(MAX_DRAFTS - 1) // room for the draft being saved
+  const old = data.slice(max - 1) // room for the row being saved
   if (!old.length) return
   const files = old.flatMap(filesOf)
   if (files.length) await supabase.storage.from('posts').remove(files)
@@ -50,6 +54,7 @@ export async function savePost(uid, id, meta, { preview, photo, photo2, photoOri
     const p = `${uid}/${id}-${name}-${ver()}.${ext(blob)}`; await up(p, blob); paths[col] = p
   }
   if (kind === 'draft' && !prev.image_path) await pruneDrafts(uid, id).catch(() => {})
+  if (meta.status === 'posted') await prunePosted(uid, id).catch(() => {})
   await Promise.all([put('image_path', preview, kind), put('photo_path', photo, 'photo'), put('photo2_path', photo2, 'photo2'), put('photo_orig_path', photoOrig, 'orig')])
   const { error } = await supabase.from('posts').upsert({ ...row, ...paths })
   if (error) { const fresh = Object.values(paths).filter((p) => p && !Object.values(prev).includes(p)); if (fresh.length) supabase.storage.from('posts').remove(fresh).catch(() => {}); throw error }

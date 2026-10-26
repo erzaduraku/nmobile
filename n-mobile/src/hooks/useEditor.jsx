@@ -3,7 +3,8 @@ import { renderTo, fontsReady } from '../features/templates/index.js'
 import { themeById } from '../features/themes/themes.js'
 import { makeCaption, DEFAULT_CAPTION_OPTS, IG_MAX_CHARS, IG_MAX_TAGS, countTags } from '../features/editor/caption.js'
 import { loadSettings, saveSettings } from '../features/settings/settingsApi.js'
-import { savePost, listPosts, deletePost, postStatus, MAX_DRAFTS } from '../features/posts/postsApi.js'
+import { savePost, listPosts, deletePost, postStatus, MAX_DRAFTS, MAX_POSTED } from '../features/posts/postsApi.js'
+import { latestPosted } from '../features/posts/limits.js'
 import { mergeIgFeed } from '../features/posts/igFeed.js'
 import { finishInstagramLogin, getInstagramAccount, publishToInstagram, findPermalinks, igProfileUrl, fetchInsights, hasInsightsScope, listInstagramMedia } from '../features/instagram/instagram.js'
 import { LS, loadImg } from '../lib/storage.js'
@@ -169,7 +170,7 @@ export default function useEditor(user) {
     try {
       // media ids of our posted rows, so the server can verify which ones were deleted on Instagram
       const known = posts.filter((p) => postStatus(p) === 'posted' && p.ig_media_id).map((p) => String(p.ig_media_id))
-      const r = await listInstagramMedia(50, known)
+      const r = await listInstagramMedia(MAX_POSTED, known)
       if (r.error) { setIgFeed((f) => ({ ...f, busy: false, loaded: true, error: r.error, code: r.code || 'instagram' })); return null }
       const media = r.media || []
       setIgFeed({ media, loaded: true, busy: false, error: '', code: '' })
@@ -184,7 +185,8 @@ export default function useEditor(user) {
   const [stats, setStats] = useState({ busy: false, needsReconnect: false, error: '' })
   const statsAuto = useRef(false)
   async function refreshStats(manual = true, rows = postsView) {
-    const items = rows.filter((p) => postStatus(p) === 'posted' && p.ig_media_id).map((p) => ({ id: p.id, media_id: String(p.ig_media_id) }))
+    // statistics only for the MAX_POSTED most recent published posts
+    const items = latestPosted(rows.filter((p) => postStatus(p) === 'posted' && p.ig_media_id)).map((p) => ({ id: p.id, media_id: String(p.ig_media_id) }))
     if (!user || !ig || !items.length) return
     setStats((s) => ({ ...s, busy: true, error: '' }))
     try {

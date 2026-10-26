@@ -4,14 +4,17 @@
 // and enough reach (>= MIN_REACH) are compared, and only recent ones (<= MAX_AGE_D) are suggested.
 // With 2+ comparable posts the best must beat the account average by >= 20%;
 // with a single one it needs a good absolute rate (>= GOOD_RATE). Pure function, no React.
+import { latestPosted } from './limits.js'
+
 export const MIN_AGE_H = 24, MAX_AGE_D = 30, MIN_REACH = 50, LIFT = 1.2, GOOD_RATE = 0.05
 
 export const interactions = (s) => (s ? (typeof s.total_interactions === 'number' ? s.total_interactions : (s.likes || 0) + (s.comments || 0) + (s.saved || 0) + (s.shares || 0)) : 0)
 export const engagement = (s) => (s && s.reach > 0 ? interactions(s) / s.reach : null)
 const pct = (r) => (r * 100).toFixed(r < 0.1 ? 1 : 0).replace('.', ',') + '%'
 
+// Only the MAX_POSTED most recent published posts are analysed.
 export function pickPromote(posts, now = Date.now()) {
-  const rows = (posts || []).map((p) => {
+  const rows = latestPosted(posts).map((p) => {
     const s = p.ig_stats, at = Date.parse(s?.timestamp || p.created_at || p.updated_at)
     return { p, s, ageH: (now - at) / 36e5, rate: engagement(s) }
   }).filter((r) => r.s && r.rate != null && r.s.reach >= MIN_REACH && r.ageH >= MIN_AGE_H)
