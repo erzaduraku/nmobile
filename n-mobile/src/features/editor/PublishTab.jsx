@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Send, Download, Copy, Shuffle, Loader2, Zap as Instagram, ExternalLink, CheckCircle2, Repeat, Undo2, AlignLeft, ListChecks, BadgePercent, MessageCircleQuestion, Briefcase, List, Tag, Phone, Hash } from 'lucide-react'
+import { Send, Download, Copy, Shuffle, Loader2, Zap as Instagram, ExternalLink, CheckCircle2, Repeat, Undo2, AlignLeft, ListChecks, CalendarClock, BadgePercent, MessageCircleQuestion, Briefcase, List, Tag, Phone, Hash } from 'lucide-react'
 import Modal from '../../components/ui/Modal.jsx'
+import ScheduleModal from '../posts/ScheduleModal.jsx'
 import { CAPTION_STYLES, HASHTAG_SETS, IG_MAX_CHARS, IG_MAX_TAGS, countTags } from './caption.js'
 
 const STYLE_ICON = { short: AlignLeft, detailed: ListChecks, offer: BadgePercent, question: MessageCircleQuestion, pro: Briefcase, bullets: List }
@@ -11,19 +12,25 @@ const Switch = ({ on, onClick, icon: I, label, disabled }) => (
 )
 
 export default function PublishTab({ ed }) {
-  const { caption, copyCaption, download, ig, igBusy, igLink, publishDirect, setCaption, setCaptionEdited, setVariant, share, published, igUrlFor, capOpts, setCapOpts, captionEdited, contact = {} } = ed
+  const { caption, copyCaption, download, ig, igBusy, igLink, publishDirect, setCaption, setCaptionEdited, setVariant, share, published, igUrlFor, capOpts, setCapOpts, captionEdited, contact = {}, schedulePost, user } = ed
   const [mine, setMine] = useState('') // the user's own edited text, kept when a new caption is generated
   // regenerate with new options / phrasing; an edited text can be brought back with "Rikthe tekstin tënd"
   const regen = (patch, shuffle) => { if (captionEdited) setMine(caption); if (patch) setCapOpts(patch); if (shuffle) setVariant((v) => v + 1); setCaptionEdited(false) }
   const hasContact = ['phone', 'whatsapp', 'address'].some((k) => (contact[k] || '').trim())
   const len = caption.length, tags = countTags(caption), over = len > IG_MAX_CHARS || tags > IG_MAX_TAGS
   const [again, setAgain] = useState(false) // confirm dialog for "Posto prapë"
+  const [plan, setPlan] = useState(false) // date/time picker for "Planifiko"
   const link = published ? published.permalink || igLink || (igUrlFor && igUrlFor({ status: 'posted', ig_media_id: published.ig_media_id })) || '' : igLink
   return (
           <div className="space-y-3">
             {published
               ? <div role="status" className="w-full rounded-2xl border-2 border-green-600 bg-green-50 text-green-700 text-xl font-bold py-4 flex items-center justify-center gap-2"><CheckCircle2 size={24} /> Postuar në Instagram</div>
-              : ig && <button className="btn-red text-xl flex items-center justify-center gap-2" disabled={igBusy} onClick={() => publishDirect()}>{igBusy ? <Loader2 className="animate-spin" /> : <Instagram size={22} />} {igBusy ? 'Duke postuar…' : `Posto direkt (@${ig.username})`}</button>}
+              : ig && (
+                <div className="flex gap-2">
+                  <button className="btn-red text-xl flex-1 flex items-center justify-center gap-2" disabled={igBusy} onClick={() => publishDirect()}>{igBusy ? <Loader2 className="animate-spin" /> : <Instagram size={22} />} {igBusy ? 'Duke postuar…' : `Posto direkt (@${ig.username})`}</button>
+                  {user && <button className="btn-light !w-auto shrink-0 px-4 flex flex-col items-center justify-center text-xs font-bold" disabled={igBusy} onClick={() => setPlan(true)} aria-label="Planifiko postimin"><CalendarClock size={22} /> Planifiko</button>}
+                </div>
+              )}
             {(link || (published && ig)) && (
               <div className="flex items-center justify-center gap-5">
                 {link && <a href={link} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-brand font-bold"><ExternalLink size={18} /> Shiko postimin</a>}
@@ -61,6 +68,7 @@ export default function PublishTab({ ed }) {
               </div>
               <p className="text-xs text-neutral-500 -mt-2">{over ? 'Instagrami lejon deri në 2200 shkronja dhe 30 hashtag. Shkurtoje tekstin.' : 'Mund ta ndryshosh tekstin. Ky tekst kopjohet, postohet dhe ruhet me postimin.'}</p>
             </div>
+            {plan && <ScheduleModal onClose={() => setPlan(false)} onSave={async (at) => { if (await schedulePost(at)) setPlan(false) }} />}
             {again && (
               <Modal title="Ta postosh prapë?" text="Ky postim është tashmë në Instagram. Nëse vazhdon, do të dalë edhe një herë si postim i ri." onClose={() => setAgain(false)}>
                 <button className="rounded-xl bg-brand text-white text-sm font-bold py-2 flex items-center justify-center gap-1" onClick={() => { setAgain(false); publishDirect(true) }}><Repeat size={15} /> Po, posto prapë</button>

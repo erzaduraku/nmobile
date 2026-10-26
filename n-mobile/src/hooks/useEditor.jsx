@@ -3,11 +3,12 @@ import { renderTo, fontsReady } from '../features/templates/index.js'
 import { themeById } from '../features/themes/themes.js'
 import { makeCaption, DEFAULT_CAPTION_OPTS, IG_MAX_CHARS, IG_MAX_TAGS, countTags } from '../features/editor/caption.js'
 import { loadSettings, saveSettings } from '../features/settings/settingsApi.js'
-import { savePost, listPosts, deletePost, postStatus, MAX_DRAFTS, MAX_POSTED } from '../features/posts/postsApi.js'
+import { savePost, listPosts, deletePost, postStatus, reschedulePost, cancelSchedule, MAX_DRAFTS, MAX_POSTED } from '../features/posts/postsApi.js'
 import { latestPosted } from '../features/posts/limits.js'
 import { mergeIgFeed } from '../features/posts/igFeed.js'
 import { finishInstagramLogin, getInstagramAccount, publishToInstagram, findPermalinks, igProfileUrl, fetchInsights, hasInsightsScope, listInstagramMedia } from '../features/instagram/instagram.js'
 import { LS, loadImg } from '../lib/storage.js'
+import { fmtWhen } from '../features/posts/schedule.js'
 import { floodRemove, aiRemove, canFlood } from '../lib/bgRemove.js'
 import { idbPut, idbGet, idbDel, idbKeys, photoKey, blobToImg, blobToDataURL, dataURLToBlob, fetchBlob, prepPhoto } from '../lib/photoStore.js'
 import { TABS } from '../app/tabs.js'
@@ -85,13 +86,20 @@ export default function useEditor(user) {
   const [published, setPublishedState] = useState(null)
   const publishedRef = useRef(null)
   const setPublished = (v) => { publishedRef.current = v; setPublishedState(v) }
+  // Instagram limits for the caption; shows the reason and returns false when it is too long
+  function captionOk() {
+    if (caption.length > IG_MAX_CHARS) { say(`Caption-i është shumë i gjatë (${caption.length}/${IG_MAX_CHARS} shkronja)`); return false }
+    if (countTags(caption) > IG_MAX_TAGS) { say(`Shumë hashtag (${countTags(caption)}/${IG_MAX_TAGS}) – Instagrami lejon deri në 30`); return false }
+    return true
+  }
+  // Full-size render, as sent to Instagram
+  async function fullCanvas() { const c = document.createElement('canvas'); await fontsReady(); renderTo(c, tpl, type, th, data, 1); return c }
   async function publishDirect(again = false) {
     if (igBusy || (publishedRef.current && !again)) return
-    if (caption.length > IG_MAX_CHARS) { say(`Caption-i është shumë i gjatë (${caption.length}/${IG_MAX_CHARS} shkronja)`); return }
-    if (countTags(caption) > IG_MAX_TAGS) { say(`Shumë hashtag (${countTags(caption)}/${IG_MAX_TAGS}) – Instagrami lejon deri në 30`); return }
+    if (!captionOk()) return
     setIgBusy(true); setIgLink('')
     try {
-      const c = document.createElement('canvas'); await fontsReady(); renderTo(c, tpl, type, th, data, 1)
+      const c = await fullCanvas()
       const jpg = c.toDataURL('image/jpeg', 0.92)
       const r = await publishToInstagram(jpg, caption, type)
       if (!r?.id) throw new Error('Instagrami nuk ktheu ID të postimit')
@@ -110,6 +118,23 @@ export default function useEditor(user) {
     } catch (e) { say('Postimi dështoi: ' + e.message) }
     setIgBusy(false)
   }
+  // Planned post: the final JPEG is uploaded now; instagram-scheduler publishes it at `at` (ISO time)
+  async function schedulePost(at) {
+    if (igBusy || !user || !ig || !captionOk()) return false
+    setIgBusy(true)
+    try {
+      const jpg = await toBlob(await fullCanvas(), 'image/jpeg', 0.92)
+      clearTimeout(draftT.current); dirty.current = false
+      const ok = await persist('scheduled', jpg, { scheduled_at: at, schedule_error: null })
+      if (!ok) throw new Error('serveri nuk u arrit')
+      say('U planifikua për ' + fmtWhen(at)); refreshPosts()
+      return true
+    } catch (e) { say('Planifikimi dështoi: ' + e.message); return false }
+    finally { setIgBusy(false) }
+  }
+  const planAction = (fn, msg) => async (...a) => { try { await fn(...a); say(msg); refreshPosts() } catch (e) { say('Nuk u ruajt: ' + (e.message || e)) } }
+  const reschedule = planAction((p, at) => reschedulePost(p.id, at), 'Ora u ndryshua')
+  const unschedule = planAction((p) => cancelSchedule(user.id, p.id), 'Planifikimi u anulua – u kthye në draft')
   const [posts, setPosts] = useState([])
   const [postsBusy, setPostsBusy] = useState(false)
   const localPosts = () => { try { return JSON.parse(LS.get('posts', '[]')) } catch { return [] } }
@@ -259,6 +284,7 @@ export default function useEditor(user) {
         if (!warned.current) { warned.current = true; say('Serveri nuk u arrit – u ruajt vetëm në pajisje') }
       }
     }
+    if (!serverOk && status === 'scheduled') throw new Error('serveri nuk u arrit') // planned posts live only on the server
     if (!serverOk) {
       const prev = localPosts().find((r) => r.id === id)
       try {
@@ -269,8 +295,8 @@ export default function useEditor(user) {
       let url = ''; try { url = thumb().toDataURL('image/jpeg', 0.75) } catch {}
       saveLocalRow({ id, created_at: prev?.created_at || now, updated_at: now, ...meta, url, hasPhoto: Boolean(photoRef.current.blob), pending: user ? user.id : undefined, image_path: undefined })
     }
-    if (status !== 'posted') setDraftId(id) // draft / exported: later edits keep updating this row
-    else { // rows published to Instagram are final: further edits become a new draft with its own photo copies
+    if (status !== 'posted' && status !== 'scheduled') setDraftId(id) // draft / exported: later edits keep updating this row
+    else { // published / planned rows are not changed by later edits: further edits become a new draft with its own photo copies
       idRef.current = null; pathsRef.current = {}; photoRef.current.dirty = Boolean(photoRef.current.blob); photo2Saved.current = ''; setDraftId(null)
     }
     return serverOk || !user
@@ -457,5 +483,5 @@ export default function useEditor(user) {
   const next = TABS[idx + 1]
   const preview = img && !['foto', 'template'].includes(tab)
 
-  return { capOpts, setCapOpts, published, stats, refreshStats, statsNeedReconnect, postsView, igFeed, refreshInstagram, bg, setBgRemoved, photoBlob: () => photoRef.current, photoMissing, opening, igUrlFor, x, setX, setXAll, img2, contact, setContact, specF, setSpecField, code, setCode, region, setRegion, noActive, setNoActive, draftId, draftState, saveDraft, newPost, caption, captionEdited, copyCaption, cta, data, download, fileName, idx, ig, igBusy, igLink, img, info, localPosts, logoImg, logoUrl, makeBlob, model, next, offer, onPhoto, posts, postsBusy, preview, price, publishDirect, ready, refreshPosts, remember, removePost, reuse, saveT, say, setCaption, setCaptionEdited, setCta, setIg, setIgBusy, setIgLink, setImg, setInfo, setLogoImg, setLogoUrl, setModel, setOffer, setPosts, setPostsBusy, setPrice, setReady, setSettings, setSpec, setSynced, setTab, setTheme, setToast, setTpl, setType, setVariant, settings, share, spec, synced, tab, th, theme, toast, tpl, type, user, variant }
+  return { schedulePost, reschedule, unschedule, capOpts, setCapOpts, published, stats, refreshStats, statsNeedReconnect, postsView, igFeed, refreshInstagram, bg, setBgRemoved, photoBlob: () => photoRef.current, photoMissing, opening, igUrlFor, x, setX, setXAll, img2, contact, setContact, specF, setSpecField, code, setCode, region, setRegion, noActive, setNoActive, draftId, draftState, saveDraft, newPost, caption, captionEdited, copyCaption, cta, data, download, fileName, idx, ig, igBusy, igLink, img, info, localPosts, logoImg, logoUrl, makeBlob, model, next, offer, onPhoto, posts, postsBusy, preview, price, publishDirect, ready, refreshPosts, remember, removePost, reuse, saveT, say, setCaption, setCaptionEdited, setCta, setIg, setIgBusy, setIgLink, setImg, setInfo, setLogoImg, setLogoUrl, setModel, setOffer, setPosts, setPostsBusy, setPrice, setReady, setSettings, setSpec, setSynced, setTab, setTheme, setToast, setTpl, setType, setVariant, settings, share, spec, synced, tab, th, theme, toast, tpl, type, user, variant }
 }

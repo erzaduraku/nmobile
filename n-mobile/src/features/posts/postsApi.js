@@ -5,8 +5,11 @@ import { supabase } from '../../lib/supabase.js'
 // Status shown in the app: 'draft' | 'exported' (downloaded/shared only) | 'posted' (published to Instagram).
 // Rows saved before migration 008 were marked 'posted' on every export, so a 'posted'/empty
 // status without any Instagram id/link is treated as 'exported'.
+// Planned-post statuses (the instagram-scheduler edge function moves them to 'posted' or 'failed')
+export const PLANNED = ['scheduled', 'publishing', 'failed']
+export const isPlanned = (p) => PLANNED.includes(p.status)
 export const postStatus = (p) => {
-  if (p.status === 'draft' || p.status === 'exported') return p.status
+  if (['draft', 'exported', ...PLANNED].includes(p.status)) return p.status
   return p.ig_media_id || p.ig_permalink ? 'posted' : 'exported'
 }
 const up = async (path, blob) => { const r = await supabase.storage.from('posts').upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: true }); if (r.error) throw r.error }
@@ -24,6 +27,17 @@ async function pruneDrafts(uid, id) { await pruneOldest(uid, id, 'draft', 'creat
 /* Same for published posts: keeps the MAX_POSTED newest (by updated_at = when it was posted;
    posted rows are final). Only app rows and their photos are removed, never anything on Instagram. */
 async function prunePosted(uid, id) { await pruneOldest(uid, id, 'posted', 'updated_at', MAX_POSTED) }
+/* Planned post: new time (also retries a failed one). Only rows not yet being published can change. */
+export async function reschedulePost(id, at) {
+  const { error } = await supabase.from('posts').update({ status: 'scheduled', scheduled_at: at, schedule_error: null, updated_at: new Date().toISOString() }).eq('id', id).in('status', ['scheduled', 'failed'])
+  if (error) throw error
+}
+/* Cancels a planned post: it becomes a draft again (oldest drafts pruned first, FIFO). */
+export async function cancelSchedule(uid, id) {
+  await pruneDrafts(uid, id)
+  const { error } = await supabase.from('posts').update({ status: 'draft', scheduled_at: null, schedule_error: null, updated_at: new Date().toISOString() }).eq('id', id).in('status', ['scheduled', 'failed'])
+  if (error) throw error
+}
 async function pruneOldest(uid, id, status, orderCol, max) {
   const { data, error } = await supabase.from('posts').select(['id', ...FILE_COLS].join(', '))
     .eq('user_id', uid).eq('status', status).neq('id', id).order(orderCol, { ascending: false })
