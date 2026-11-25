@@ -3,7 +3,8 @@ import { renderTo, fontsReady } from '../features/templates/index.js'
 import { themeById } from '../features/themes/themes.js'
 import { makeCaption, DEFAULT_CAPTION_OPTS, IG_MAX_CHARS, IG_MAX_TAGS, countTags } from '../features/editor/caption.js'
 import { loadSettings, saveSettings } from '../features/settings/settingsApi.js'
-import { savePost, listPosts, deletePost, postStatus, reschedulePost, cancelSchedule, MAX_DRAFTS, MAX_POSTED } from '../features/posts/postsApi.js'
+import { savePost, listPosts, deletePost, postStatus, reschedulePost, cancelSchedule, MAX_POSTED } from '../features/posts/postsApi.js'
+import { nextLocalPosts, postsForView, restoreTarget } from '../features/posts/devicePosts.js'
 import { latestPosted } from '../features/posts/limits.js'
 import { mergeIgFeed } from '../features/posts/igFeed.js'
 import { finishInstagramLogin, getInstagramAccount, publishToInstagram, findPermalinks, igProfileUrl, fetchInsights, hasInsightsScope, listInstagramMedia } from '../features/instagram/instagram.js'
@@ -13,7 +14,8 @@ import { floodRemove, aiRemove, canFlood } from '../lib/bgRemove.js'
 import { idbPut, idbGet, idbDel, idbKeys, photoKey, blobToImg, blobToDataURL, dataURLToBlob, fetchBlob, prepPhoto } from '../lib/photoStore.js'
 import { TABS } from '../app/tabs.js'
 import { EMPTY_X, EMPTY_CONTACT } from '../features/editor/fields.js'
-import { EMPTY_SPECS, composeSpec, parseSpec } from '../features/editor/specFields.js'
+import { EMPTY_SPECS, composeSpec, parseSpec, normField, SPEC_FIELDS } from '../features/editor/specFields.js'
+import { loadOptionSets, saveOptionSets, addToOptions, removeFromOptions } from '../features/editor/options.js'
 import { analyzePostImage, listAnalyses } from '../features/insights/api.js'
 
 // All editor state + actions. Returned object `ed` is passed to every tab component.
@@ -73,6 +75,22 @@ export default function useEditor(user) {
   // Caption style + toggles (last choice remembered on this device, and saved with each post in extra.caption_opts)
   const [capOpts, setCapOptsState] = useState(() => { try { return { ...DEFAULT_CAPTION_OPTS, ...JSON.parse(LS.get('capopts', '{}')) } } catch { return DEFAULT_CAPTION_OPTS } })
   const setCapOpts = (patch) => setCapOptsState((o) => { const n = { ...o, ...patch }; LS.set('capopts', JSON.stringify(n)); return n })
+  // Editable option lists, one independent set per field; stored on this device.
+  const [optionSets, setOptionSets] = useState(() => loadOptionSets({
+    capacity: x.capacity, cta, title: x.title, badge: x.seriesBadge,
+    condition: x.condition, notes: x.notes || [],
+    colors: (x.colors || []).map((c) => c.name),
+    ...Object.fromEntries(SPEC_FIELDS.map((f) => ['spec.' + f.id, normField(f.id, specF[f.id] || '')])),
+  }))
+  const addOption = (key, raw, makeOption) => {
+    const result = addToOptions(optionSets, key, raw, makeOption)
+    if (result.ok) { setOptionSets(result.sets); saveOptionSets(result.sets) }
+    return result
+  }
+  const removeOption = (key, raw) => {
+    const sets = removeFromOptions(optionSets, key, raw)
+    setOptionSets(sets); saveOptionSets(sets)
+  }
   const [settings, setSettings] = useState(false)
   const [toast, setToast] = useState('')
   const [synced, setSynced] = useState(!user)
@@ -144,7 +162,6 @@ export default function useEditor(user) {
   const [postsBusy, setPostsBusy] = useState(false)
   const localPosts = () => { try { return JSON.parse(LS.get('posts', '[]')) } catch { return [] } }
   // Posts deleted directly on Instagram (posts.ig_deleted_at, migration 012) are hidden everywhere; rows/photos are kept
-  const visible = (p) => !p.ig_deleted_at
   function markIgDeleted(mediaIds) {
     const gone = new Set((mediaIds || []).map(String)); if (!gone.size) return
     const hit = (p) => p.ig_media_id && gone.has(String(p.ig_media_id))
@@ -160,12 +177,11 @@ export default function useEditor(user) {
     try {
       if (user) {
         // server rows + drafts that could only be saved on this device (synced on the next successful save)
-        const server = await listPosts(), ids = new Set(server.map((p) => p.id))
-        const pend = localPosts().filter((p) => p.pending === user.id && !ids.has(p.id))
-        setPosts([...pend, ...server].filter(visible).sort((a, b) => String(b.updated_at || b.created_at).localeCompare(String(a.updated_at || a.created_at))))
+        const server = await listPosts()
+        setPosts(postsForView({ userId: user.id, server, local: localPosts() }))
         listAnalyses().then(setAnalyses).catch(() => {})
-      } else { setPosts(localPosts().filter((p) => !p.pending && visible(p))); setAnalyses([]) }
-    } catch { setPosts(localPosts().filter(visible)); say('Postimet nuk u ngarkuan nga serveri') }
+      } else { setPosts(postsForView({ local: localPosts() })); setAnalyses([]) }
+    } catch { setPosts(postsForView({ failed: true, local: localPosts() })); say('Postimet nuk u ngarkuan nga serveri') }
     setPostsBusy(false)
   }
   useEffect(() => { refreshPosts() }, [user])
@@ -268,9 +284,7 @@ export default function useEditor(user) {
     try { localStorage.setItem('nm_posts', JSON.stringify(out.map((p, i) => (i ? { ...p, url: undefined } : p)))); return true } catch { return false }
   }
   function saveLocalRow(row) {
-    const all = [row, ...localPosts().filter((p) => p.id !== row.id)]
-    const keep = new Set(all.filter((p) => p.status === 'draft').slice(0, MAX_DRAFTS).map((p) => p.id))
-    const out = all.filter((p) => p.status !== 'draft' || keep.has(p.id)).slice(0, 40)
+    const out = nextLocalPosts(localPosts(), row)
     const ok = writeLocal(out)
     const ids = new Set(out.map((p) => p.id))
     idbKeys().then((ks) => { const drop = ks.filter((k) => !ids.has(String(k).split(':')[0])); if (drop.length) idbDel(...drop) })
@@ -358,7 +372,7 @@ export default function useEditor(user) {
       const [b1, b2, b0] = await Promise.all([photoOf(p, 'photo'), photoOf(p, 'photo2'), photoOf(p, 'orig')])
       let im = null; if (b1) { try { im = await blobToImg(b1) } catch {} }
       let p2 = ''; if (b2) { try { p2 = await blobToDataURL(b2) } catch {} }
-      const pst = postStatus(p), isDraft = pst !== 'posted' // drafts and exported posts are edited in place
+      const target = restoreTarget(p), pst = target.status, isDraft = target.editInPlace
       dirty.current = false
       setPublished(pst === 'posted' ? { id: p.id, ig_media_id: p.ig_media_id || null, permalink: p.ig_permalink || null } : null)
       setIgLink(pst === 'posted' ? p.ig_permalink || '' : '')
@@ -370,8 +384,8 @@ export default function useEditor(user) {
       setXAll({ ...EMPTY_X, ...ex, photo2: p2 }); setCode(p.model_code || ''); setRegion(p.region || ''); setNoActive(Boolean(p.no_active))
       setTpl(p.template || 'hero'); setType(p.type || 'post'); setTheme(p.theme || 'standard')
       // Draft: keep editing the same row. Posted: edits become a new draft (new id, own copies).
-      idRef.current = isDraft ? p.id : null
-      pathsRef.current = isDraft && !p.pending ? { image_path: p.image_path || null, photo_path: p.photo_path || null, photo2_path: p.photo2_path || null, photo_orig_path: p.photo_orig_path || null } : {}
+      idRef.current = target.id
+      pathsRef.current = target.paths
       photoRef.current = { blob: im ? b1 : null, orig: im ? b0 || null : null, dirty: im ? !(isDraft && p.photo_path) : false }
       let io = null; if (im && b0) { try { io = await blobToImg(b0) } catch {} }
       // Older photos with a solid background (white box): offer the same "Hiq sfondin" toggle
@@ -379,7 +393,7 @@ export default function useEditor(user) {
       if (im && !b0) { try { const a = await canFlood(b1); smooth = a.smooth; cut = a.alpha } catch {} }
       setBg({ removed: cut, smooth, busy: '', progress: 0 })
       photo2Saved.current = isDraft && p.photo2_path ? p2 : ''
-      setDraftId(isDraft ? p.id : null); setDraftState('')
+      setDraftId(target.id); setDraftState('')
       showImgs(im, io); setPhotoMissing(!im)
       const offerBg = im && !cut && smooth
       setTab(im && !offerBg ? 'detajet' : 'foto')
@@ -521,5 +535,5 @@ export default function useEditor(user) {
   const next = TABS[idx + 1]
   const preview = img && !['foto', 'template'].includes(tab)
 
-  return { analyses, runAnalysis, schedulePost, reschedule, unschedule, capOpts, setCapOpts, published, stats, refreshStats, statsNeedReconnect, postsView, igFeed, refreshInstagram, bg, setBgRemoved, photoBlob: () => photoRef.current, photoMissing, opening, igUrlFor, x, setX, setXAll, img2, contact, setContact, specF, setSpecField, code, setCode, region, setRegion, noActive, setNoActive, draftId, draftState, saveDraft, newPost, caption, captionEdited, copyCaption, cta, data, download, fileName, idx, ig, igBusy, igLink, img, info, localPosts, logoImg, logoUrl, makeBlob, model, next, offer, onPhoto, posts, postsBusy, preview, price, publishDirect, ready, refreshPosts, remember, removePost, reuse, saveT, say, setCaption, setCaptionEdited, setCta, setIg, setIgBusy, setIgLink, setImg, setInfo, setLogoImg, setLogoUrl, setModel, setOffer, setPosts, setPostsBusy, setPrice, setReady, setSettings, setSpec, setSynced, setTab, setTheme, setToast, setTpl, setType, setVariant, settings, share, spec, synced, tab, th, theme, toast, tpl, type, user, variant }
+  return { analyses, runAnalysis, schedulePost, reschedule, unschedule, capOpts, setCapOpts, optionSets, addOption, removeOption, published, stats, refreshStats, statsNeedReconnect, postsView, igFeed, refreshInstagram, bg, setBgRemoved, photoBlob: () => photoRef.current, photoMissing, opening, igUrlFor, x, setX, setXAll, img2, contact, setContact, specF, setSpecField, code, setCode, region, setRegion, noActive, setNoActive, draftId, draftState, saveDraft, newPost, caption, captionEdited, copyCaption, cta, data, download, fileName, idx, ig, igBusy, igLink, img, info, localPosts, logoImg, logoUrl, makeBlob, model, next, offer, onPhoto, posts, postsBusy, preview, price, publishDirect, ready, refreshPosts, remember, removePost, reuse, saveT, say, setCaption, setCaptionEdited, setCta, setIg, setIgBusy, setIgLink, setImg, setInfo, setLogoImg, setLogoUrl, setModel, setOffer, setPosts, setPostsBusy, setPrice, setReady, setSettings, setSpec, setSynced, setTab, setTheme, setToast, setTpl, setType, setVariant, settings, share, spec, synced, tab, th, theme, toast, tpl, type, user, variant }
 }
