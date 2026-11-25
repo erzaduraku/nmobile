@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'node',
-    include: ['src/**/*.test.js'],
+    include: ['src/**/*.test.{js,jsx}'],
     // These files use node:test and are run by `node --test` so both suites stay intact.
     exclude: ['src/features/insights/insights.test.js', 'src/features/posts/guards.test.js'],
     coverage: {

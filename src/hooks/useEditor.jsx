@@ -14,7 +14,8 @@ import { floodRemove, aiRemove, canFlood } from '../lib/bgRemove.js'
 import { idbPut, idbGet, idbDel, idbKeys, photoKey, blobToImg, blobToDataURL, dataURLToBlob, fetchBlob, prepPhoto } from '../lib/photoStore.js'
 import { TABS } from '../app/tabs.js'
 import { EMPTY_X, EMPTY_CONTACT } from '../features/editor/fields.js'
-import { EMPTY_SPECS, composeSpec, parseSpec } from '../features/editor/specFields.js'
+import { EMPTY_SPECS, composeSpec, parseSpec, normField, SPEC_FIELDS } from '../features/editor/specFields.js'
+import { loadOptionSets, saveOptionSets, addToOptions, removeFromOptions } from '../features/editor/options.js'
 import { analyzePostImage, listAnalyses } from '../features/insights/api.js'
 
 // All editor state + actions. Returned object `ed` is passed to every tab component.
@@ -74,6 +75,22 @@ export default function useEditor(user) {
   // Caption style + toggles (last choice remembered on this device, and saved with each post in extra.caption_opts)
   const [capOpts, setCapOptsState] = useState(() => { try { return { ...DEFAULT_CAPTION_OPTS, ...JSON.parse(LS.get('capopts', '{}')) } } catch { return DEFAULT_CAPTION_OPTS } })
   const setCapOpts = (patch) => setCapOptsState((o) => { const n = { ...o, ...patch }; LS.set('capopts', JSON.stringify(n)); return n })
+  // Editable option lists, one independent set per field; stored on this device.
+  const [optionSets, setOptionSets] = useState(() => loadOptionSets({
+    capacity: x.capacity, cta, title: x.title, badge: x.seriesBadge,
+    condition: x.condition, notes: x.notes || [],
+    colors: (x.colors || []).map((c) => c.name),
+    ...Object.fromEntries(SPEC_FIELDS.map((f) => ['spec.' + f.id, normField(f.id, specF[f.id] || '')])),
+  }))
+  const addOption = (key, raw, makeOption) => {
+    const result = addToOptions(optionSets, key, raw, makeOption)
+    if (result.ok) { setOptionSets(result.sets); saveOptionSets(result.sets) }
+    return result
+  }
+  const removeOption = (key, raw) => {
+    const sets = removeFromOptions(optionSets, key, raw)
+    setOptionSets(sets); saveOptionSets(sets)
+  }
   const [settings, setSettings] = useState(false)
   const [toast, setToast] = useState('')
   const [synced, setSynced] = useState(!user)
@@ -518,5 +535,5 @@ export default function useEditor(user) {
   const next = TABS[idx + 1]
   const preview = img && !['foto', 'template'].includes(tab)
 
-  return { analyses, runAnalysis, schedulePost, reschedule, unschedule, capOpts, setCapOpts, published, stats, refreshStats, statsNeedReconnect, postsView, igFeed, refreshInstagram, bg, setBgRemoved, photoBlob: () => photoRef.current, photoMissing, opening, igUrlFor, x, setX, setXAll, img2, contact, setContact, specF, setSpecField, code, setCode, region, setRegion, noActive, setNoActive, draftId, draftState, saveDraft, newPost, caption, captionEdited, copyCaption, cta, data, download, fileName, idx, ig, igBusy, igLink, img, info, localPosts, logoImg, logoUrl, makeBlob, model, next, offer, onPhoto, posts, postsBusy, preview, price, publishDirect, ready, refreshPosts, remember, removePost, reuse, saveT, say, setCaption, setCaptionEdited, setCta, setIg, setIgBusy, setIgLink, setImg, setInfo, setLogoImg, setLogoUrl, setModel, setOffer, setPosts, setPostsBusy, setPrice, setReady, setSettings, setSpec, setSynced, setTab, setTheme, setToast, setTpl, setType, setVariant, settings, share, spec, synced, tab, th, theme, toast, tpl, type, user, variant }
+  return { analyses, runAnalysis, schedulePost, reschedule, unschedule, capOpts, setCapOpts, optionSets, addOption, removeOption, published, stats, refreshStats, statsNeedReconnect, postsView, igFeed, refreshInstagram, bg, setBgRemoved, photoBlob: () => photoRef.current, photoMissing, opening, igUrlFor, x, setX, setXAll, img2, contact, setContact, specF, setSpecField, code, setCode, region, setRegion, noActive, setNoActive, draftId, draftState, saveDraft, newPost, caption, captionEdited, copyCaption, cta, data, download, fileName, idx, ig, igBusy, igLink, img, info, localPosts, logoImg, logoUrl, makeBlob, model, next, offer, onPhoto, posts, postsBusy, preview, price, publishDirect, ready, refreshPosts, remember, removePost, reuse, saveT, say, setCaption, setCaptionEdited, setCta, setIg, setIgBusy, setIgLink, setImg, setInfo, setLogoImg, setLogoUrl, setModel, setOffer, setPosts, setPostsBusy, setPrice, setReady, setSettings, setSpec, setSynced, setTab, setTheme, setToast, setTpl, setType, setVariant, settings, share, spec, synced, tab, th, theme, toast, tpl, type, user, variant }
 }
