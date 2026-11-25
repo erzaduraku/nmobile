@@ -49,7 +49,7 @@ function Harness({ field = 'capacity', initialValue = '', multiple = false, onVa
 }
 
 function openManager(host) {
-  click(findButton(host, 'Menaxho opsionet'))
+  click(findButton(host, 'Add'))
 }
 
 beforeEach(() => { localStorage.clear(); document.body.innerHTML = '' })
@@ -135,7 +135,7 @@ describe('OptionChips', () => {
     expect(findButton(again.host, '2TB')).toBeTruthy()
     openManager(again.host)
     click(again.host.querySelector('[aria-label="Fshi 128GB"]'))
-    click(findButton(dialog(again.host, 'Ta fshish këtë opsion?'), 'Anulo'))
+    click(findButton(dialog(again.host, 'Ta fshish këtë opsion'), 'Anulo'))
     click(findButton(again.host, 'Ruaj ndryshimet'))
     again.unmount()
 

@@ -9,7 +9,7 @@ const FIELD = 'list'
 // until the user saves, so each field still owns its own list.
 export default function OptionChips({
   options = [], value, onPick, onSave, makeOption, multiple = false, variant = 'regular',
-  icons = false, label = 'fusha', placeholder = 'Shto opsion', renderOption,
+  icons = false, label = 'fusha', renderOption,
 }) {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(options)
@@ -62,7 +62,7 @@ export default function OptionChips({
   const compact = variant === 'compact'
   return (
     <div>
-      <div className="flex flex-wrap gap-2 mb-2">
+      <div className="flex flex-wrap items-center gap-2">
         {options.map((o) => {
           const on = isSelected(o)
           return (
@@ -78,10 +78,16 @@ export default function OptionChips({
             </button>
           )
         })}
+        <button
+          type="button"
+          onClick={openManager}
+          className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
+        >
+          <Plus size={13} /> Add
+        </button>
       </div>
-      <button type="button" onClick={openManager} className="text-sm font-semibold text-neutral-500 hover:text-neutral-800">Menaxho opsionet</button>
       {open && (
-        <Modal title={label} onClose={close} className="max-h-[85vh] overflow-y-auto">
+        <Modal title="Menaxho opsionet" onClose={close} className="max-h-[85vh] overflow-y-auto">
           <ul className="max-h-52 overflow-y-auto rounded-xl border border-neutral-200 divide-y divide-neutral-100">
             {draft.map((o) => (
               <li key={optionKey(o)} className="flex items-center gap-2 px-2.5 py-1.5">
@@ -96,7 +102,7 @@ export default function OptionChips({
               className="flex-1 min-w-0 rounded-xl border-2 border-neutral-200 px-3 py-1.5 text-sm outline-none focus:border-brand"
               value={input}
               onChange={(e) => { setInput(e.target.value); setMessage('') }}
-              placeholder={placeholder}
+              placeholder="Shkruaj opsionin e ri..."
               aria-label={`Shto opsion te ${label}`}
             />
             <button type="submit" className="shrink-0 rounded-xl bg-neutral-100 px-3 py-1.5 text-sm font-bold hover:bg-neutral-200">Shto</button>
@@ -107,7 +113,7 @@ export default function OptionChips({
         </Modal>
       )}
       {pendingDelete && (
-        <Modal title="Ta fshish këtë opsion?" text={`“${optionText(pendingDelete)}” hiqet nga lista.`} onClose={() => setPendingDelete(null)}>
+        <Modal title="Ta fshish këtë opsion" text={`${optionText(pendingDelete)} hiqet nga lista.`} onClose={() => setPendingDelete(null)}>
           <button type="button" onClick={confirmDelete} className="rounded-xl bg-red-600 text-white text-sm font-bold py-2 flex items-center justify-center gap-1"><Trash2 size={15} /> Fshi</button>
           <button type="button" onClick={() => setPendingDelete(null)} className="rounded-xl bg-neutral-100 text-sm font-bold py-2">Anulo</button>
         </Modal>

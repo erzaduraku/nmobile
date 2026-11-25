@@ -22,70 +22,82 @@ async function openEditor(page) {
   await expect(page.getByText('Hapi 4 nga 5')).toBeVisible()
 }
 
-const field = (page, name) => page.getByLabel(`Shto opsion te ${name}`).locator('xpath=../..')
-// The editor has sticky header/footer bars; dispatch directly so scrolling never lands under them.
+const field = (page, heading) => page.locator('div').filter({ has: page.getByText(heading, { exact: true }) }).filter({ has: page.getByRole('button', { name: 'Add', exact: true }) }).last()
 const press = (locator) => locator.evaluate((el) => el.click())
 
-async function addOption(page, name, text, chip = text) {
-  const area = field(page, name)
-  await area.getByLabel(`Shto opsion te ${name}`).fill(text)
-  await press(area.getByRole('button', { name: '+ Add' }))
-  const button = area.getByRole('button', { name: chip, exact: true })
+async function manage(page, root) {
+  await press(root.getByRole('button', { name: 'Add', exact: true }))
+  await expect(page.getByText('Menaxho opsionet')).toBeVisible()
+}
+
+async function addOption(page, root, name, text, chip = text) {
+  await manage(page, root)
+  await page.getByLabel(`Shto opsion te ${name}`).fill(text)
+  await press(page.getByRole('button', { name: 'Shto', exact: true }))
+  await press(page.getByRole('button', { name: 'Ruaj ndryshimet' }))
+  const button = root.getByRole('button', { name: chip, exact: true })
   await expect(button).toBeVisible()
   return button
 }
 
-async function exerciseField(page, name, text, chip = text) {
-  const button = await addOption(page, name, text, chip)
+async function removeOption(page, root, chip) {
+  await manage(page, root)
+  await press(page.getByRole('button', { name: `Fshi ${chip}` }))
+  await press(page.getByRole('button', { name: 'Fshi', exact: true }))
+  await press(page.getByRole('button', { name: 'Ruaj ndryshimet' }))
+  await expect(root.getByRole('button', { name: chip, exact: true })).toHaveCount(0)
+}
+
+async function exerciseField(page, heading, name, text, chip = text) {
+  const root = field(page, heading)
+  const button = await addOption(page, root, name, text, chip)
   await press(button)
   await expect(button).toHaveAttribute('aria-pressed', 'true')
-  await press(field(page, name).getByRole('button', { name: `Hiq opsionin ${chip}` }))
-  await expect(field(page, name).getByRole('button', { name: chip, exact: true })).toHaveCount(0)
+  await removeOption(page, root, chip)
 }
 
 test('every editable chip field adds, selects, deletes and keeps its own options', async ({ page }) => {
   test.setTimeout(150_000)
   await openEditor(page)
 
-  // Duplicate and empty values never enter a list.
-  const capacity = field(page, 'Kapaciteti')
-  await capacity.getByLabel('Shto opsion te Kapaciteti').fill(' 256 gb ')
-  await press(capacity.getByRole('button', { name: '+ Add' }))
-  await expect(capacity.getByRole('status')).toContainText('ekziston')
-  await capacity.getByLabel('Shto opsion te Kapaciteti').fill('   ')
-  await press(capacity.getByRole('button', { name: '+ Add' }))
-  await expect(capacity.getByRole('status')).toContainText('zbrazët')
+  const capacity = field(page, 'Kapaciteti (opsional)')
+  await manage(page, capacity)
+  await page.getByLabel('Shto opsion te Kapaciteti').fill(' 256 gb ')
+  await press(page.getByRole('button', { name: 'Shto', exact: true }))
+  await expect(page.getByRole('status')).toContainText('ekziston')
+  await page.getByLabel('Shto opsion te Kapaciteti').fill('   ')
+  await press(page.getByRole('button', { name: 'Shto', exact: true }))
+  await expect(page.getByRole('status')).toContainText('zbrazët')
+  await press(page.getByRole('button', { name: 'Anulo' }))
 
-  for (const [name, value, chip] of [
-    ['Kapaciteti', '2TB', '2TB'],
-    ['Teksti i butonit', 'Thirre tani', 'Thirre tani'],
-  ]) await exerciseField(page, name, value, chip)
+  for (const [heading, name, value, chip] of [
+    ['Kapaciteti (opsional)', 'Kapaciteti', '2TB', '2TB'],
+    ['Teksti i butonit', 'Teksti i butonit', 'Thirre tani', 'Thirre tani'],
+  ]) await exerciseField(page, heading, name, value, chip)
 
   await press(page.getByRole('button', { name: 'Më shumë detaje' }))
-  for (const [name, value, chip] of [
-    ['Titulli', 'TEST OFERTA', 'TEST OFERTA'],
-    ['Shenja e serisë', 'Test Badge', 'Test Badge'],
-    ['Ngjyrat', 'Test #123456', 'Test'],
-    ['RAM', '18GB', '18GB'],
-    ['Memoria', '2TB', '2TB'],
-    ['Kamera', '64MP', '64MP'],
-    ['Bateria', '7000mAh', '7000mAh'],
-    ['Ekrani', '7.2"', '7.2"'],
-    ['Gjendja', 'I ri me kuti', 'I ri me kuti'],
-    ['Shënimet', 'Kuti origjinale', 'Kuti origjinale'],
-  ]) await exerciseField(page, name, value, chip)
+  for (const [heading, name, value, chip] of [
+    ['Titulli sipër (opsional)', 'Titulli', 'TEST OFERTA', 'TEST OFERTA'],
+    ['Shenja e serisë (opsionale)', 'Shenja e serisë', 'Test Badge', 'Test Badge'],
+    ['Ngjyrat', 'Ngjyrat', 'Test #123456', 'Test'],
+    ['RAM', 'RAM', '18GB', '18GB'],
+    ['Memoria', 'Memoria', '2TB', '2TB'],
+    ['Kamera', 'Kamera', '64MP', '64MP'],
+    ['Bateria', 'Bateria', '7000mAh', '7000mAh'],
+    ['Ekrani', 'Ekrani', '7.2"', '7.2"'],
+    ['Gjendja', 'Gjendja', 'I ri me kuti', 'I ri me kuti'],
+    ['Shënime', 'Shënimet', 'Kuti origjinale', 'Kuti origjinale'],
+  ]) await exerciseField(page, heading, name, value, chip)
 
-  // Deleting a selected value clears the field, not just the chip.
-  const selected = await addOption(page, 'Kapaciteti', '2TB')
+  const selected = await addOption(page, capacity, 'Kapaciteti', '2TB')
   await press(selected)
-  await expect(page.getByPlaceholder('p.sh. 512GB')).toHaveValue('2TB')
-  await press(field(page, 'Kapaciteti').getByRole('button', { name: 'Hiq opsionin 2TB' }))
-  await expect(page.getByPlaceholder('p.sh. 512GB')).toHaveValue('')
+  await expect(selected).toHaveAttribute('aria-pressed', 'true')
+  await removeOption(page, capacity, '2TB')
 
-  // Additions and deletions are read back from localStorage after a refresh.
-  await addOption(page, 'Kapaciteti', '2TB')
-  await press(field(page, 'Kapaciteti').getByRole('button', { name: 'Hiq opsionin 128GB' }))
+  await addOption(page, capacity, 'Kapaciteti', '2TB')
+  await removeOption(page, capacity, '128GB')
   await openEditor(page)
-  await expect(field(page, 'Kapaciteti').getByRole('button', { name: '2TB', exact: true })).toBeVisible()
-  await expect(field(page, 'Kapaciteti').getByRole('button', { name: '128GB', exact: true })).toHaveCount(0)
+  const again = field(page, 'Kapaciteti (opsional)')
+  await expect(again.getByRole('button', { name: '2TB', exact: true })).toBeVisible()
+  await expect(again.getByRole('button', { name: '128GB', exact: true })).toHaveCount(0)
 })
