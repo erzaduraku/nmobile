@@ -1,20 +1,47 @@
-// Render testues: të gjitha templates × lloj × temë në /workspace/n-mobile-renders
+// Render testues: të gjitha templates × lloj × temë. Dalja është OUT, ose folderi i përkohshëm.
 import { chromium } from 'playwright'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
-const out = process.env.OUT || '/workspace/n-mobile-renders'
+import os from 'node:os'
+import path from 'node:path'
+const out = process.env.OUT || path.join(os.tmpdir(), 'n-mobile-renders')
 fs.mkdirSync(out, { recursive: true })
-const srv = spawn('npx', ['vite', 'preview', '--port', '4319', '--strictPort'], { stdio: 'ignore' })
+const viteBin = path.join(process.cwd(), 'node_modules', 'vite', 'bin', 'vite.js')
+const srv = spawn(process.execPath, [viteBin, 'preview', '--port', '4319', '--strictPort'], { stdio: 'ignore' })
 await new Promise((r) => setTimeout(r, 2500))
-const browser = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome' })
-const page = await browser.newPage()
-await page.goto('http://localhost:4319/?test')
-await page.waitForFunction(() => window.__nm)
+let browser
+try {
+  const options = { headless: true }
+  if (process.env.CHROME) options.executablePath = process.env.CHROME
+  else options.channel = 'chrome'
+  browser = await chromium.launch(options)
+} catch (error) {
+  srv.kill()
+  console.error('render-test needs Google Chrome. Set CHROME to the browser executable, or install Chrome.')
+  console.error(error instanceof Error ? error.message : error)
+  process.exit(1)
+}
+try {
+const context = await browser.newContext({ serviceWorkers: 'block' })
+const page = await context.newPage()
+await page.goto('http://localhost:4319/?test', { waitUntil: 'domcontentloaded' })
+await page.waitForFunction(() => window.__nm, null, { timeout: 20000 })
 if (process.env.NOPRICE) await page.evaluate(() => { window.__np = 1 })
 if (process.env.WHITE) await page.evaluate(() => { window.__white = 1 })
 if (process.env.FULL) await page.evaluate(() => { window.__full = 1 })
 await page.evaluate(([a, b, c]) => { window.__tpls = a; window.__ths = b; window.__types = c }, [process.env.TPLS || '', process.env.THEMES || '', process.env.TYPES || ''])
-const shots = await page.evaluate(async () => {
+const total = await page.evaluate(() => {
+  const { TEMPLATES, THEMES } = window.__nm
+  const want = (list, id) => !list || list.split(',').includes(id)
+  let n = 0
+  for (const t of TEMPLATES) for (const type of ['post', 'story']) for (const th of THEMES) {
+    if (want(window.__tpls, t.id) && want(window.__ths, th.id) && want(window.__types, type)) n++
+  }
+  return n
+})
+const shots = []
+for (let from = 0; from < total; from += 8) {
+  const batch = await page.evaluate(async (range) => {
   const { renderTo, fontsReady, TEMPLATES, THEMES } = window.__nm
   await fontsReady()
   // foto demo: telefon realist në portret (pamje nga mbrapa + përpara), sfond studioje
@@ -49,13 +76,21 @@ const shots = await page.evaluate(async () => {
   if (window.__full) Object.assign(data, { series: 'Galaxy', model: 'S26 Ultra', seriesBadge: 'Galaxy AI', capacity: '512GB', price: '1199', oldPrice: '1399', offer: '-15%', spec: '12GB RAM | 512GB | 200MP | 5000mAh', colors: [{ name: 'Titan', hex: '#8E8A84' }, { name: 'Blu', hex: '#2F5D9B', delta: '+50' }], condition: 'I ri në pako', notes: ['Me faturë'], code: '', region: '', noActive: false, slogan: 'Fuqia e AI në duart e tua', contact: { phone: '044 123 456', address: 'Prishtinë', instagram: 'nmobile' }, img2: img })
   const want = (list, id) => !list || list.split(',').includes(id)
   const res = []
+  let seen = 0
   for (const t of TEMPLATES) for (const type of ['post', 'story']) for (const th of THEMES) {
     if (!want(window.__tpls, t.id) || !want(window.__ths, th.id) || !want(window.__types, type)) continue
+    if (seen++ < range.from) continue
+    if (res.length >= range.count) break
     const cv = document.createElement('canvas'); renderTo(cv, t.id, type, th, data, 1)
     res.push([(window.__np ? 'noprice_' : '') + (window.__white ? 'white_' : '') + (window.__full ? 'full_' : '') + `${t.id}_${type}_${th.id}.png`, cv.toDataURL('image/png')])
   }
   return res
-})
-for (const [n, d] of shots) fs.writeFileSync(`${out}/${n}`, Buffer.from(d.split(',')[1], 'base64'))
+  }, { from, count: 8 })
+  shots.push(...batch)
+}
+for (const [n, d] of shots) fs.writeFileSync(path.join(out, n), Buffer.from(d.split(',')[1], 'base64'))
 console.log('U krijuan', shots.length, 'PNG në', out)
-await browser.close(); srv.kill()
+} finally {
+  if (browser) await browser.close()
+  srv.kill()
+}

@@ -25,3 +25,10 @@ Run each file once, in order, in the Supabase dashboard: **SQL Editor → New qu
 - `010_instagram_insights.sql` – `posts.ig_stats` / `ig_stats_at` (cached Instagram statistics) and `instagram_accounts.scopes` (granted permissions) (applied).
 - `011_instagram_shared.sql` – index on `instagram_accounts.ig_user_id` (same Instagram account on several app logins is allowed) and `instagram_media_stats` (statistics per Instagram media, server-only) (applied).
 - `012_ig_deleted.sql` – `posts.ig_deleted_at` (post deleted directly on Instagram; hidden in the app, row kept) (applied).
+- `013_draft_limit.sql` through `015_scheduled_posts.sql` – draft and posted limits, and scheduled publishing.
+- `016_post_image_analysis.sql` – cached visual features. One row per user, image hash, provider, model and prompt version. Service role writes it; the user can read their own rows.
+- `017_post_path_owner.sql` – a post path must be empty or start with that user's id.
+- `018_analysis_links.sql` – links one cached analysis to each post or Instagram media that asked for it. A second post does not replace the first post id on the feature row.
+- `019_recommendation_snapshots.sql` – recommendation history. Insert and select are limited to the owner. The same algorithm version does not insert the same snapshot twice; a new version keeps the old rows.
+
+Run 016 through 019 in order if they are not already applied. Do not edit 001–017. Deploy `analyze-post-image` after 016 and 018, and set `GROQ_API_KEY` (optional `IMAGE_ANALYSIS_MODEL`) with `supabase secrets set`. That key is not a Vite variable.
