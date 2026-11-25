@@ -38,8 +38,7 @@ export default function DetailsTab({ ed }) {
         <div className="col-span-2"><label className="label">Modeli</label><input className="field" value={model} onChange={(e) => setModel(e.target.value)} placeholder="p.sh. S26 Ultra" /></div>
       </div>
       {has('meta') && <div><label className="label">Kapaciteti (opsional)</label>
-        <OptionChips label="Kapaciteti" options={optionSets.capacity} value={x.capacity} onPick={(v) => setX('capacity', v)} makeOption={(s) => s.toUpperCase()} onSave={(list) => replaceOptions('capacity', list)} placeholder="Shto kapacitet" />
-        <input className="field" value={x.capacity} onChange={(e) => setX('capacity', e.target.value.toUpperCase())} placeholder="p.sh. 512GB" />
+        <OptionChips label="Kapaciteti" options={optionSets.capacity} value={x.capacity} onPick={(v) => setX('capacity', v)} makeOption={(s) => s.toUpperCase()} onSave={(list) => replaceOptions('capacity', list)} />
       </div>}
       <div className={`grid gap-3 ${has('oldPrice') ? 'grid-cols-2' : 'grid-cols-1'}`}>
         <div><label className="label">Çmimi (opsional)</label><input className="field" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="p.sh. 899" /></div>
@@ -48,18 +47,15 @@ export default function DetailsTab({ ed }) {
       {has('offer') && <div><label className="label">Ofertë (opsionale)</label><input className="field" value={offer} onChange={(e) => setOffer(e.target.value)} placeholder="p.sh. -20%" /></div>}
       <div><label className="label">Teksti i butonit</label>
         <OptionChips label="Teksti i butonit" options={optionSets.cta} value={cta} onPick={setCta} onSave={(list) => replaceOptions('cta', list)} />
-        <input className="field" value={cta} onChange={(e) => setCta(e.target.value)} placeholder="Bli tani!" />
       </div>
       {anyMore && <button type="button" onClick={() => setMore(!more)} className="w-full min-h-[48px] flex items-center justify-between rounded-xl bg-neutral-100 px-4 font-bold">Më shumë detaje <ChevronDown className={`transition ${more ? 'rotate-180' : ''}`} /></button>}
       {anyMore && more && <div className="space-y-4">
       {has('title') && <div><label className="label">Titulli sipër (opsional)</label>
         <OptionChips label="Titulli" options={optionSets.title} value={x.title} onPick={(v) => setX('title', v)} onSave={(list) => replaceOptions('title', list)} />
-        <input className="field" value={x.title} onChange={(e) => setX('title', e.target.value)} placeholder="p.sh. SUPER OFERTA NË N MOBILE!" />
       </div>}
       {has('slogan') && <div><label className="label">Slogani (opsional)</label><input className="field" value={x.slogan} onChange={(e) => setX('slogan', e.target.value)} placeholder="p.sh. Fuqia e AI në duart e tua" /></div>}
       {has('badge') && <div><label className="label">Shenja e serisë (opsionale)</label>
         <OptionChips label="Shenja e serisë" options={optionSets.badge} value={x.seriesBadge} onPick={(v) => setX('seriesBadge', v)} onSave={(list) => replaceOptions('badge', list)} />
-        <input className="field" value={x.seriesBadge} onChange={(e) => setX('seriesBadge', e.target.value)} placeholder="p.sh. Galaxy AI" />
       </div>}
       {has('colors') && <div className="rounded-2xl border-2 border-neutral-200 p-3">
         <div className="font-bold mb-2">Ngjyrat</div>
@@ -83,13 +79,12 @@ export default function DetailsTab({ ed }) {
           makeOption={colorOption}
           onSave={(list) => replaceOptions('colors', list)}
           renderOption={(o) => <><span className="w-6 h-6 rounded-full border" style={{ background: o.hex || colorHexFor(optionText(o)) }} />{optionText(o)}</>}
-          placeholder="p.sh. Blu #2F5D9B"
         />}
       </div>}
 
       {has('spec') && <div className="rounded-2xl border-2 border-neutral-200 p-3 space-y-3" data-spec-section>
         <div className="flex items-baseline justify-between"><span className="font-bold">Specifikat</span><span className="text-xs text-neutral-400">opsionale, deri në 4 në foto</span></div>
-        {SPEC_FIELDS.map((f) => { const I = ICONS[f.id], v = specF[f.id] || '', nv = normField(f.id, v), opts = optionSets['spec.' + f.id] || f.picks, picked = opts.some((o) => sameOption(o, nv)); return (
+        {SPEC_FIELDS.map((f) => { const I = ICONS[f.id], nv = normField(f.id, specF[f.id] || ''), opts = optionSets['spec.' + f.id] || f.picks; return (
           <div key={f.id}>
             <div className="flex items-center gap-2 mb-1"><I size={16} className="text-brand" /><span className="text-sm font-semibold text-neutral-600">{f.label}</span></div>
             <OptionChips
@@ -101,7 +96,6 @@ export default function DetailsTab({ ed }) {
               makeOption={(s) => normField(f.id, s)}
               onSave={(list) => replaceOptions('spec.' + f.id, list)}
             />
-            <input className={`shrink-0 w-24 rounded-full border-2 px-3 py-1.5 text-sm outline-none focus:border-brand ${v && !picked ? 'border-brand' : 'border-neutral-200'}`} value={picked ? '' : v} onChange={(e) => setSpecField(f.id, e.target.value)} placeholder="Tjetër" aria-label={f.label + ' tjetër'} />
           </div>) })}
         {specF.extra && <div><label className="label">Të tjera</label><input className="field" value={specF.extra} onChange={(e) => setSpecField('extra', e.target.value)} /></div>}
       </div>}
