@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { PenLine, Loader2, History, Trash2, ExternalLink, Maximize2, Download, RefreshCw, Eye, Users, Heart, MessageCircle, Bookmark, Send, Megaphone, AlertTriangle, Link2, CalendarClock, XCircle } from 'lucide-react'
 import { pickPromote } from './promote.js'
+import { buildReport } from '../insights/report.js'
+import InsightsPanel, { AccountInsights } from '../insights/InsightsPanel.jsx'
 import { startInstagramLogin } from '../instagram/instagram.js'
 import { postStatus, isPlanned } from './postsApi.js'
 import { fmtWhen } from './schedule.js'
@@ -39,11 +41,15 @@ function ReconnectNotice({ title, text }) {
 }
 
 export default function PostsTab({ ed }) {
-  const { postsView: posts, postsBusy, removePost, reuse, user, igUrlFor, opening, ig, stats, statsNeedReconnect, igFeed, refreshInstagram, reschedule, unschedule } = ed
+  const { postsView: posts, postsBusy, removePost, reuse, user, igUrlFor, opening, ig, stats, statsNeedReconnect, igFeed, refreshInstagram, reschedule, unschedule, analyses, runAnalysis } = ed
   const [f, setF] = useState('all')
   const [del, setDel] = useState(null) // postimi që po fshihet (dritarja e konfirmimit)
   const [zoom, setZoom] = useState(null) // url e fotos së hapur të madhe
   const [move, setMove] = useState(null) // postimi i planifikuar që po i ndryshohet ora
+  const [insight, setInsight] = useState(null)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [analyzeError, setAnalyzeError] = useState('')
+  const [unconfigured, setUnconfigured] = useState(false)
   const st = postStatus
   const inF = (p, id) => (id === 'all' ? true : id === 'scheduled' ? isPlanned(p) : st(p) === id)
   const count = Object.fromEntries(SEG.map(([id]) => [id, posts.filter((p) => inF(p, id)).length]))
@@ -51,6 +57,16 @@ export default function PostsTab({ ed }) {
   const list = posts.filter((p) => inF(p, f)).sort((a, b) => (f === 'scheduled' ? Date.parse(a.scheduled_at || 0) - Date.parse(b.scheduled_at || 0) : 0))
   const promo = useMemo(() => pickPromote(posts.filter((p) => st(p) === 'posted')), [posts])
   const promoPost = promo && posts.find((p) => p.id === promo.id)
+  const report = useMemo(() => buildReport(posts, analyses || []), [posts, analyses])
+  const analyze = async (p) => {
+    if (!user || !runAnalysis) return
+    setAnalyzing(true); setAnalyzeError(''); setUnconfigured(false)
+    try {
+      const r = await runAnalysis(p)
+      if (r && r.configured === false) setUnconfigured(true)
+    } catch (e) { setAnalyzeError(e.message || 'Analiza dështoi.') }
+    setAnalyzing(false)
+  }
   const canStats = Boolean(user && ig)
   const busy = stats.busy || igFeed.busy
   return (
@@ -87,6 +103,7 @@ export default function PostsTab({ ed }) {
       {canStats && statsNeedReconnect && igFeed.code !== 'reconnect' && (
         <ReconnectNotice title="Lidhe sërish Instagramin për statistikat" text="Për shikimet, arritjen, ruajtjet dhe ndarjet duhet leje e re nga Instagrami." />
       )}
+      {f !== 'draft' && posts.some((p) => st(p) === 'posted') && <AccountInsights report={report} />}
       {promoPost && f !== 'draft' && (
         <div className="mb-4 rounded-2xl border-2 border-brand bg-brand-soft p-3 flex gap-3 items-center">
           {promoPost.url ? <img src={promoPost.url} alt="" className="w-14 h-14 rounded-xl object-cover shrink-0" /> : <div className="w-14 h-14 rounded-xl bg-neutral-100 shrink-0" />}
@@ -135,10 +152,12 @@ export default function PostsTab({ ed }) {
               {st(p) === 'posted' && igUrlFor(p) && (
                 <a href={igUrlFor(p)} target="_blank" rel="noopener noreferrer" className="mt-2 rounded-xl border-2 border-neutral-200 text-xs font-bold py-1.5 flex items-center justify-center gap-1 text-neutral-700"><ExternalLink size={14} /> Hape në Instagram</a>
               )}
+              {st(p) === 'posted' && <button type="button" className="mt-2 w-full rounded-xl border-2 border-brand/30 text-brand text-xs font-bold py-1.5" onClick={() => { setAnalyzeError(''); setUnconfigured(false); setInsight(p) }}>Analiza</button>}
             </div>
           </div>
         ))}
       </div>
+      {insight && <InsightsPanel post={insight} report={report} posts={posts} analyses={analyses || []} onClose={() => setInsight(null)} onAnalyze={analyze} busy={analyzing} error={analyzeError} unconfigured={unconfigured} canAnalyze={Boolean(user)} />}
       {move && <ScheduleModal title="Ndrysho orën" initial={move.scheduled_at} onClose={() => setMove(null)} onSave={async (at) => { await reschedule(move, at); setMove(null) }} />}
       {zoom && <ImageLightbox src={zoom} alt="Postimi" onClose={() => setZoom(null)} />}
       {del && (
