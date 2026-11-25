@@ -47,6 +47,9 @@ export default function useEditor(user) {
   // Draft/post identity and its product photos. Refs (not state) so queued/debounced saves
   // always see the latest values. id = client uuid of the row (server and device).
   const idRef = useRef(null)
+  const imgRef = useRef(null)
+  const imgOrigRef = useRef(null)
+  const formRef = useRef({})
   const pathsRef = useRef({})                                // { image_path, photo_path, photo2_path } on the server row
   // blob = photo the templates use (cut-out PNG after background removal), orig = the photo as uploaded
   // (only kept while the background is removed, so "Rikthe origjinalin" works after reload); dirty = not yet on server
@@ -247,6 +250,15 @@ export default function useEditor(user) {
   const igUrlFor = (p) => (postStatus(p) === 'posted' ? p.ig_permalink || igProfileUrl(ig?.username || contact.instagram) : null)
   // photo2 is kept out of `extra` (it is stored as a file, see persistNow)
   const metaNow = (status) => ({ model, price, offer, spec, info, cta, model_code: code, region, no_active: noActive, extra: { ...x, photo2: '', caption_opts: { ...capOpts, variant, edited: captionEdited } }, template: tpl, type, theme, caption, status })
+  imgRef.current = img
+  imgOrigRef.current = imgOrig
+  formRef.current = { model, price, offer, spec, info, cta, code, region, noActive, x, capOpts, variant, captionEdited, tpl, type, theme, caption }
+  const revokeImg = (im) => { if (im?.src?.startsWith('blob:')) URL.revokeObjectURL(im.src) }
+  const showImgs = (next, orig) => {
+    if (imgRef.current && imgRef.current !== next) revokeImg(imgRef.current)
+    if (imgOrigRef.current && imgOrigRef.current !== orig) revokeImg(imgOrigRef.current)
+    imgRef.current = next; imgOrigRef.current = orig; setImg(next); setImgOrig(orig)
+  }
   function thumb(q = 0.25) { const c = document.createElement('canvas'); renderTo(c, tpl, type, th, data, q); return c }
   const toBlob = (c, t, q) => new Promise((res, rej) => { try { c.toBlob((b) => (b ? res(b) : rej(new Error('toBlob failed'))), t, q) } catch (e) { rej(e) } })
   const newId = () => (globalThis.crypto?.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => { const r = (Math.random() * 16) | 0; return (ch === 'x' ? r : (r & 3) | 8).toString(16) }))
@@ -270,9 +282,11 @@ export default function useEditor(user) {
     idbDel(photoKey(id), photoKey(id, 'photo2'), photoKey(id, 'orig'))
   }
   async function persistNow(status, blob, igExtra) {
-    const meta = { ...metaNow(status), ...(igExtra || {}) }
     if (!idRef.current) idRef.current = newId()
-    const id = idRef.current, p2 = x.photo2 || '', now = new Date().toISOString()
+    const id = idRef.current
+    const f = formRef.current
+    const meta = { model: f.model, price: f.price, offer: f.offer, spec: f.spec, info: f.info, cta: f.cta, model_code: f.code, region: f.region, no_active: f.noActive, extra: { ...f.x, photo2: '', caption_opts: { ...f.capOpts, variant: f.variant, edited: f.captionEdited } }, template: f.tpl, type: f.type, theme: f.theme, caption: f.caption, status, ...(igExtra || {}) }
+    const p2 = f.x?.photo2 || '', now = new Date().toISOString()
     let serverOk = false
     if (user) {
       try {
@@ -284,25 +298,30 @@ export default function useEditor(user) {
         removeLocal(id) // an older device-only copy of this draft is now on the server
       } catch (e) {
         console.error('Saving the post to Supabase failed, keeping it on this device', e)
-        if (!warned.current) { warned.current = true; say('Serveri nuk u arrit – u ruajt vetëm në pajisje') }
       }
     }
     if (!serverOk && status === 'scheduled') throw new Error('serveri nuk u arrit') // planned posts live only on the server
+    let localOk = false
     if (!serverOk) {
       const prev = localPosts().find((r) => r.id === id)
+      let photosOk = true
       try {
         if (photoRef.current.blob) await idbPut(photoKey(id), photoRef.current.blob)
         if (photoRef.current.orig) await idbPut(photoKey(id, 'orig'), photoRef.current.orig); else await idbDel(photoKey(id, 'orig'))
         if (p2) await idbPut(photoKey(id, 'photo2'), await dataURLToBlob(p2)); else await idbDel(photoKey(id, 'photo2'))
-      } catch (e) { console.error('IndexedDB', e) }
-      let url = ''; try { url = thumb().toDataURL('image/jpeg', 0.75) } catch {}
-      saveLocalRow({ id, created_at: prev?.created_at || now, updated_at: now, ...meta, url, hasPhoto: Boolean(photoRef.current.blob), pending: user ? user.id : undefined, image_path: undefined })
+      } catch (e) { console.error('IndexedDB', e); photosOk = false }
+      if (photosOk) {
+        let url = ''; try { url = thumb().toDataURL('image/jpeg', 0.75) } catch {}
+        localOk = saveLocalRow({ id, created_at: prev?.created_at || now, updated_at: now, ...meta, url, hasPhoto: Boolean(photoRef.current.blob), pending: user ? user.id : undefined, image_path: undefined })
+      }
+      if (!localOk) say('Drafti nuk u ruajt në pajisje. Provo sërish.')
+      else if (user && !warned.current) { warned.current = true; say('Serveri nuk u arrit – u ruajt vetëm në pajisje') }
     }
     if (status !== 'posted' && status !== 'scheduled') setDraftId(id) // draft / exported: later edits keep updating this row
     else { // published / planned rows are not changed by later edits: further edits become a new draft with its own photo copies
       idRef.current = null; pathsRef.current = {}; photoRef.current.dirty = Boolean(photoRef.current.blob); photo2Saved.current = ''; setDraftId(null)
     }
-    return serverOk || !user
+    return serverOk || localOk
   }
   // One save at a time (autosave + manual save + export must not race)
   const saveQ = useRef(Promise.resolve())
@@ -312,9 +331,11 @@ export default function useEditor(user) {
     if (!ig?.ig_media_id && publishedRef.current) return // download/share of an already posted design: no extra "Shkarkuar" row
     clearTimeout(draftT.current); dirty.current = false; await persist(ig?.ig_media_id ? 'posted' : 'exported', blob, ig); refreshPosts() }
   async function saveDraft(silent) {
-    if (!img) return
+    if (!imgRef.current) return
     clearTimeout(draftT.current); dirty.current = false; setDraftState('saving')
-    await persist('draft'); setDraftState('saved'); refreshPosts(); if (!silent) say('U ruajt si draft')
+    const ok = await persist('draft')
+    if (!ok) { setDraftState(''); return }
+    setDraftState('saved'); refreshPosts(); if (!silent) say('U ruajt si draft')
   }
   // Stored photo of a row: device copy (IndexedDB) first, then the server file, then legacy inline dataURLs.
   async function photoOf(p, which) {
@@ -325,14 +346,20 @@ export default function useEditor(user) {
   }
   async function reuse(p) {
     setOpening(p.id)
+    restoring.current = true
+    clearTimeout(draftT.current)
     try {
+      if (dirty.current && imgRef.current) {
+        dirty.current = false
+        const ok = await persist('draft')
+        if (!ok) { say('Drafti aktual nuk u ruajt. Hapja u ndal.'); return }
+      }
       await saveQ.current
       const [b1, b2, b0] = await Promise.all([photoOf(p, 'photo'), photoOf(p, 'photo2'), photoOf(p, 'orig')])
       let im = null; if (b1) { try { im = await blobToImg(b1) } catch {} }
       let p2 = ''; if (b2) { try { p2 = await blobToDataURL(b2) } catch {} }
       const pst = postStatus(p), isDraft = pst !== 'posted' // drafts and exported posts are edited in place
-      clearTimeout(draftT.current); dirty.current = false
-      restoring.current = true // state below is loaded, not edited: no autosave (cleared in finally)
+      dirty.current = false
       setPublished(pst === 'posted' ? { id: p.id, ig_media_id: p.ig_media_id || null, permalink: p.ig_permalink || null } : null)
       setIgLink(pst === 'posted' ? p.ig_permalink || '' : '')
       setModel(p.model || ''); setPrice(p.price || ''); setOffer(p.offer || ''); setSpec(p.spec || ''); setInfo(p.info || ''); setCta(p.cta || '')
@@ -347,24 +374,26 @@ export default function useEditor(user) {
       pathsRef.current = isDraft && !p.pending ? { image_path: p.image_path || null, photo_path: p.photo_path || null, photo2_path: p.photo2_path || null, photo_orig_path: p.photo_orig_path || null } : {}
       photoRef.current = { blob: im ? b1 : null, orig: im ? b0 || null : null, dirty: im ? !(isDraft && p.photo_path) : false }
       let io = null; if (im && b0) { try { io = await blobToImg(b0) } catch {} }
-      setImgOrig(io)
       // Older photos with a solid background (white box): offer the same "Hiq sfondin" toggle
       let smooth = false, cut = Boolean(b0)
       if (im && !b0) { try { const a = await canFlood(b1); smooth = a.smooth; cut = a.alpha } catch {} }
       setBg({ removed: cut, smooth, busy: '', progress: 0 })
       photo2Saved.current = isDraft && p.photo2_path ? p2 : ''
       setDraftId(isDraft ? p.id : null); setDraftState('')
-      setImg(im); setPhotoMissing(!im)
+      showImgs(im, io); setPhotoMissing(!im)
       const offerBg = im && !cut && smooth
       setTab(im && !offerBg ? 'detajet' : 'foto')
       say(offerBg ? 'Mund ta heqësh sfondin e fotos me “Hiq sfondin”' : im ? (pst === 'draft' ? 'Drafti u hap' : pst === 'exported' ? 'Postimi u hap' : 'Të dhënat u ngarkuan') : 'Fotoja e produktit mungon – ngarkoje përsëri, të dhënat u ruajtën')
     } finally { setOpening(null); setTimeout(() => { restoring.current = false }, 150) }
   }
   function newPost() {
+    clearTimeout(draftT.current); dirty.current = false; restoring.current = true
     setPublished(null); setIgLink('')
-    idRef.current = null; pathsRef.current = {}; photoRef.current = { blob: null, orig: null, dirty: false }; photo2Saved.current = ''; setImgOrig(null)
+    idRef.current = null; pathsRef.current = {}; photoRef.current = { blob: null, orig: null, dirty: false }; photo2Saved.current = ''
+    showImgs(null, null)
     setBg({ removed: false, smooth: false, busy: '', progress: 0 })
-    setDraftId(null); setDraftState(''); setPhotoMissing(false); setTheme('standard'); setTpl('hero'); setModel(''); setPrice(''); setOffer(''); setSpec(''); setXAll(EMPTY_X); setCode(''); setRegion(''); setNoActive(false); setCaptionEdited(false); dirty.current = false
+    setDraftId(null); setDraftState(''); setPhotoMissing(false); setTheme('standard'); setTpl('hero'); setModel(''); setPrice(''); setOffer(''); setSpec(''); setXAll(EMPTY_X); setCode(''); setRegion(''); setNoActive(false); setCaptionEdited(false)
+    setTimeout(() => { restoring.current = false }, 150)
   }
   async function removePost(p) {
     if (user && !p.pending) { try { await deletePost(p) } catch { say('Fshirja dështoi'); return } }
@@ -434,7 +463,7 @@ export default function useEditor(user) {
   async function usePhoto(blob, orig) {
     const im = await blobToImg(blob)
     let io = null; if (orig) { try { io = await blobToImg(orig) } catch {} }
-    photoRef.current = { blob, orig: orig || null, dirty: true }; setImg(im); setImgOrig(io)
+    photoRef.current = { blob, orig: orig || null, dirty: true }; showImgs(im, io)
   }
   async function onPhoto(e) {
     const f = e.target.files?.[0]; if (!f) return

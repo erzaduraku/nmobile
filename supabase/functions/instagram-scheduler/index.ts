@@ -27,16 +27,27 @@ async function publishOne(db: Db, id: string) {
   if (!row) return { id, skipped: true }
   try {
     if (!row.image_path) throw new Error('Mungon fotoja e postimit')
+    if (row.image_path.includes('..') || row.image_path.split('/')[0] !== row.user_id) throw new Error('Fotoja nuk i përket këtij postimi')
+    if (row.ig_media_id) {
+      await db.from('posts').update({ status: 'posted', schedule_error: null, updated_at: nowIso() }).eq('id', id)
+      return { id, posted: row.ig_media_id, skipped: true }
+    }
     const { data: acc } = await db.from('instagram_accounts').select('*').eq('user_id', row.user_id).maybeSingle()
     if (!acc) throw new Error('Instagrami nuk është i lidhur')
     const token = await freshToken(acc)
     const file = await db.storage.from('posts').download(row.image_path)
     if (file.error || !file.data) throw new Error('Fotoja nuk u gjet në server')
     const r = await publishImage(acc.ig_user_id, token, row.user_id, new Uint8Array(await file.data.arrayBuffer()), row.caption || '', row.type || 'post')
+    const saved = await db.from('posts').update({ status: 'posted', ig_media_id: r.id, ig_permalink: r.permalink, schedule_error: null, updated_at: nowIso() }).eq('id', id)
+    if (saved.error) throw saved.error
     await prunePosted(db, row.user_id, row.id)
-    await db.from('posts').update({ status: 'posted', ig_media_id: r.id, ig_permalink: r.permalink, schedule_error: null, updated_at: nowIso() }).eq('id', id)
     return { id, posted: r.id }
   } catch (e) {
+    const { data: cur } = await db.from('posts').select('ig_media_id').eq('id', id).maybeSingle()
+    if (cur?.ig_media_id) {
+      await db.from('posts').update({ status: 'posted', schedule_error: null, updated_at: nowIso() }).eq('id', id)
+      return { id, posted: cur.ig_media_id }
+    }
     const error = String((e as Error)?.message || e).slice(0, 300)
     await db.from('posts').update({ status: 'failed', schedule_error: error, updated_at: nowIso() }).eq('id', id)
     return { id, error }
@@ -48,8 +59,11 @@ Deno.serve(async (req) => {
   try {
     const { data: ok } = await db.rpc('check_scheduler_secret', { s: req.headers.get('x-scheduler-secret') || '' })
     if (ok !== true) return json({ error: 'Forbidden' }, 403)
+    // A publish that already received a media id must not be marked failed and published again.
+    await db.from('posts').update({ status: 'posted', schedule_error: null, updated_at: nowIso() })
+      .eq('status', 'publishing').not('ig_media_id', 'is', null)
     await db.from('posts').update({ status: 'failed', schedule_error: 'Postimi u ndërpre. Kontrollo Instagramin para se ta planifikosh sërish.', updated_at: nowIso() })
-      .eq('status', 'publishing').lt('updated_at', new Date(Date.now() - STUCK_MIN * 60e3).toISOString())
+      .eq('status', 'publishing').is('ig_media_id', null).lt('updated_at', new Date(Date.now() - STUCK_MIN * 60e3).toISOString())
     const { data: due, error } = await db.from('posts').select('id').eq('status', 'scheduled').lte('scheduled_at', nowIso()).order('scheduled_at').limit(BATCH)
     if (error) return json({ error: error.message }, 500)
     const results = []
