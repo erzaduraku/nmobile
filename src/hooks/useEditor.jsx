@@ -14,6 +14,7 @@ import { idbPut, idbGet, idbDel, idbKeys, photoKey, blobToImg, blobToDataURL, da
 import { TABS } from '../app/tabs.js'
 import { EMPTY_X, EMPTY_CONTACT } from '../features/editor/fields.js'
 import { EMPTY_SPECS, composeSpec, parseSpec } from '../features/editor/specFields.js'
+import { analyzePostImage, listAnalyses } from '../features/insights/api.js'
 
 // All editor state + actions. Returned object `ed` is passed to every tab component.
 export default function useEditor(user) {
@@ -136,6 +137,7 @@ export default function useEditor(user) {
   const reschedule = planAction((p, at) => reschedulePost(p.id, at), 'Ora u ndryshua')
   const unschedule = planAction((p) => cancelSchedule(user.id, p.id), 'Planifikimi u anulua – u kthye në draft')
   const [posts, setPosts] = useState([])
+  const [analyses, setAnalyses] = useState([])
   const [postsBusy, setPostsBusy] = useState(false)
   const localPosts = () => { try { return JSON.parse(LS.get('posts', '[]')) } catch { return [] } }
   // Posts deleted directly on Instagram (posts.ig_deleted_at, migration 012) are hidden everywhere; rows/photos are kept
@@ -158,7 +160,8 @@ export default function useEditor(user) {
         const server = await listPosts(), ids = new Set(server.map((p) => p.id))
         const pend = localPosts().filter((p) => p.pending === user.id && !ids.has(p.id))
         setPosts([...pend, ...server].filter(visible).sort((a, b) => String(b.updated_at || b.created_at).localeCompare(String(a.updated_at || a.created_at))))
-      } else setPosts(localPosts().filter((p) => !p.pending && visible(p)))
+        listAnalyses().then(setAnalyses).catch(() => {})
+      } else { setPosts(localPosts().filter((p) => !p.pending && visible(p))); setAnalyses([]) }
     } catch { setPosts(localPosts().filter(visible)); say('Postimet nuk u ngarkuan nga serveri') }
     setPostsBusy(false)
   }
@@ -463,6 +466,12 @@ export default function useEditor(user) {
     } catch (err) { console.error(err); setBg((s) => ({ ...s, busy: '' })); say('Heqja e sfondit dështoi – provo përsëri') }
   }
 
+  async function runAnalysis(post) {
+    const r = await analyzePostImage(post)
+    if (r?.analysis) setAnalyses((list) => [r.analysis, ...list.filter((a) => a.id !== r.analysis.id)])
+    return r
+  }
+
   async function makeBlob() { const c = document.createElement('canvas'); await fontsReady(); renderTo(c, tpl, type, th, data, 1); return new Promise((res) => c.toBlob(res, 'image/png')) }
   const fileName = () => `nmobile-${(model || 'postim').replace(/[^\w-]+/g, '-').toLowerCase()}-${type}.png`
   async function download() {
@@ -483,5 +492,5 @@ export default function useEditor(user) {
   const next = TABS[idx + 1]
   const preview = img && !['foto', 'template'].includes(tab)
 
-  return { schedulePost, reschedule, unschedule, capOpts, setCapOpts, published, stats, refreshStats, statsNeedReconnect, postsView, igFeed, refreshInstagram, bg, setBgRemoved, photoBlob: () => photoRef.current, photoMissing, opening, igUrlFor, x, setX, setXAll, img2, contact, setContact, specF, setSpecField, code, setCode, region, setRegion, noActive, setNoActive, draftId, draftState, saveDraft, newPost, caption, captionEdited, copyCaption, cta, data, download, fileName, idx, ig, igBusy, igLink, img, info, localPosts, logoImg, logoUrl, makeBlob, model, next, offer, onPhoto, posts, postsBusy, preview, price, publishDirect, ready, refreshPosts, remember, removePost, reuse, saveT, say, setCaption, setCaptionEdited, setCta, setIg, setIgBusy, setIgLink, setImg, setInfo, setLogoImg, setLogoUrl, setModel, setOffer, setPosts, setPostsBusy, setPrice, setReady, setSettings, setSpec, setSynced, setTab, setTheme, setToast, setTpl, setType, setVariant, settings, share, spec, synced, tab, th, theme, toast, tpl, type, user, variant }
+  return { analyses, runAnalysis, schedulePost, reschedule, unschedule, capOpts, setCapOpts, published, stats, refreshStats, statsNeedReconnect, postsView, igFeed, refreshInstagram, bg, setBgRemoved, photoBlob: () => photoRef.current, photoMissing, opening, igUrlFor, x, setX, setXAll, img2, contact, setContact, specF, setSpecField, code, setCode, region, setRegion, noActive, setNoActive, draftId, draftState, saveDraft, newPost, caption, captionEdited, copyCaption, cta, data, download, fileName, idx, ig, igBusy, igLink, img, info, localPosts, logoImg, logoUrl, makeBlob, model, next, offer, onPhoto, posts, postsBusy, preview, price, publishDirect, ready, refreshPosts, remember, removePost, reuse, saveT, say, setCaption, setCaptionEdited, setCta, setIg, setIgBusy, setIgLink, setImg, setInfo, setLogoImg, setLogoUrl, setModel, setOffer, setPosts, setPostsBusy, setPrice, setReady, setSettings, setSpec, setSynced, setTab, setTheme, setToast, setTpl, setType, setVariant, settings, share, spec, synced, tab, th, theme, toast, tpl, type, user, variant }
 }

@@ -3,6 +3,7 @@ import { Send, Download, Copy, Shuffle, Loader2, Zap as Instagram, ExternalLink,
 import Modal from '../../components/ui/Modal.jsx'
 import ScheduleModal from '../posts/ScheduleModal.jsx'
 import { CAPTION_STYLES, HASHTAG_SETS, IG_MAX_CHARS, IG_MAX_TAGS, countTags } from './caption.js'
+import EditorAdvice from '../insights/EditorAdvice.jsx'
 
 const STYLE_ICON = { short: AlignLeft, detailed: ListChecks, offer: BadgePercent, question: MessageCircleQuestion, pro: Briefcase, bullets: List }
 const Switch = ({ on, onClick, icon: I, label, disabled }) => (
@@ -23,6 +24,7 @@ export default function PublishTab({ ed }) {
   const link = published ? published.permalink || igLink || (igUrlFor && igUrlFor({ status: 'posted', ig_media_id: published.ig_media_id })) || '' : igLink
   return (
           <div className="space-y-3">
+            <EditorAdvice ed={ed} />
             {published
               ? <div role="status" className="w-full rounded-2xl border-2 border-green-600 bg-green-50 text-green-700 text-xl font-bold py-4 flex items-center justify-center gap-2"><CheckCircle2 size={24} /> Postuar në Instagram</div>
               : ig && (

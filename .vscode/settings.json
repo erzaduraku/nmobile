@@ -5,7 +5,7 @@
                                "*.sql":  "postgres"
                            },
     "deno.enablePaths":  [
-                             "n-mobile/supabase/functions"
+                             "supabase/functions"
                          ],
     "deno.lint":  true
 }
