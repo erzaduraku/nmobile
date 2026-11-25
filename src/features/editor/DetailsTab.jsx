@@ -23,7 +23,7 @@ const colorOption = (text) => {
 }
 
 export default function DetailsTab({ ed }) {
-  const { cta, info, model, offer, price, setCta, setInfo, setModel, setOffer, setPrice, specF, setSpecField, code, setCode, region, setRegion, noActive, setNoActive, saveDraft, draftState, x, setX, tpl, type, optionSets, addOption, removeOption } = ed
+  const { cta, info, model, offer, price, setCta, setInfo, setModel, setOffer, setPrice, specF, setSpecField, code, setCode, region, setRegion, noActive, setNoActive, saveDraft, draftState, x, setX, tpl, type, optionSets, replaceOptions } = ed
   // Only inputs the selected template draws (values stay in state when switching templates)
   const has = (k) => fs.has(k), fs = templateFields(tpl, type)
   const anyMore = ['title', 'slogan', 'badge', 'colors', 'spec', 'meta', 'photo2', 'info'].some(has)
@@ -38,7 +38,7 @@ export default function DetailsTab({ ed }) {
         <div className="col-span-2"><label className="label">Modeli</label><input className="field" value={model} onChange={(e) => setModel(e.target.value)} placeholder="p.sh. S26 Ultra" /></div>
       </div>
       {has('meta') && <div><label className="label">Kapaciteti (opsional)</label>
-        <OptionChips label="Kapaciteti" options={optionSets.capacity} value={x.capacity} onPick={(v) => setX('capacity', v)} onAdd={(raw) => addOption('capacity', raw, (s) => s.toUpperCase())} onDelete={(o) => removeOption('capacity', o)} placeholder="Shto kapacitet" />
+        <OptionChips label="Kapaciteti" options={optionSets.capacity} value={x.capacity} onPick={(v) => setX('capacity', v)} makeOption={(s) => s.toUpperCase()} onSave={(list) => replaceOptions('capacity', list)} placeholder="Shto kapacitet" />
         <input className="field" value={x.capacity} onChange={(e) => setX('capacity', e.target.value.toUpperCase())} placeholder="p.sh. 512GB" />
       </div>}
       <div className={`grid gap-3 ${has('oldPrice') ? 'grid-cols-2' : 'grid-cols-1'}`}>
@@ -47,18 +47,18 @@ export default function DetailsTab({ ed }) {
       </div>
       {has('offer') && <div><label className="label">Ofertë (opsionale)</label><input className="field" value={offer} onChange={(e) => setOffer(e.target.value)} placeholder="p.sh. -20%" /></div>}
       <div><label className="label">Teksti i butonit</label>
-        <OptionChips label="Teksti i butonit" options={optionSets.cta} value={cta} onPick={setCta} onAdd={(raw) => addOption('cta', raw)} onDelete={(o) => removeOption('cta', o)} />
+        <OptionChips label="Teksti i butonit" options={optionSets.cta} value={cta} onPick={setCta} onSave={(list) => replaceOptions('cta', list)} />
         <input className="field" value={cta} onChange={(e) => setCta(e.target.value)} placeholder="Bli tani!" />
       </div>
       {anyMore && <button type="button" onClick={() => setMore(!more)} className="w-full min-h-[48px] flex items-center justify-between rounded-xl bg-neutral-100 px-4 font-bold">Më shumë detaje <ChevronDown className={`transition ${more ? 'rotate-180' : ''}`} /></button>}
       {anyMore && more && <div className="space-y-4">
       {has('title') && <div><label className="label">Titulli sipër (opsional)</label>
-        <OptionChips label="Titulli" options={optionSets.title} value={x.title} onPick={(v) => setX('title', v)} onAdd={(raw) => addOption('title', raw)} onDelete={(o) => removeOption('title', o)} />
+        <OptionChips label="Titulli" options={optionSets.title} value={x.title} onPick={(v) => setX('title', v)} onSave={(list) => replaceOptions('title', list)} />
         <input className="field" value={x.title} onChange={(e) => setX('title', e.target.value)} placeholder="p.sh. SUPER OFERTA NË N MOBILE!" />
       </div>}
       {has('slogan') && <div><label className="label">Slogani (opsional)</label><input className="field" value={x.slogan} onChange={(e) => setX('slogan', e.target.value)} placeholder="p.sh. Fuqia e AI në duart e tua" /></div>}
       {has('badge') && <div><label className="label">Shenja e serisë (opsionale)</label>
-        <OptionChips label="Shenja e serisë" options={optionSets.badge} value={x.seriesBadge} onPick={(v) => setX('seriesBadge', v)} onAdd={(raw) => addOption('badge', raw)} onDelete={(o) => removeOption('badge', o)} />
+        <OptionChips label="Shenja e serisë" options={optionSets.badge} value={x.seriesBadge} onPick={(v) => setX('seriesBadge', v)} onSave={(list) => replaceOptions('badge', list)} />
         <input className="field" value={x.seriesBadge} onChange={(e) => setX('seriesBadge', e.target.value)} placeholder="p.sh. Galaxy AI" />
       </div>}
       {has('colors') && <div className="rounded-2xl border-2 border-neutral-200 p-3">
@@ -77,11 +77,11 @@ export default function DetailsTab({ ed }) {
           multiple
           onPick={(names, o) => {
             const name = optionText(o)
-            if (names.length < colors.length) setX('colors', colors.filter((c) => !sameOption(c.name, name)))
-            else if (colors.length < 4) setX('colors', [...colors, { name, hex: o.hex || colorHexFor(name), delta: '' }])
+            if (names.length < colors.length) setX('colors', colors.filter((c) => names.some((n) => sameOption(c.name, n))))
+            else if (colors.length < 4) setX('colors', [...colors, { name, hex: o?.hex || colorHexFor(name), delta: '' }])
           }}
-          onAdd={(raw) => addOption('colors', raw, colorOption)}
-          onDelete={(o) => removeOption('colors', o)}
+          makeOption={colorOption}
+          onSave={(list) => replaceOptions('colors', list)}
           renderOption={(o) => <><span className="w-6 h-6 rounded-full border" style={{ background: o.hex || colorHexFor(optionText(o)) }} />{optionText(o)}</>}
           placeholder="p.sh. Blu #2F5D9B"
         />}
@@ -98,8 +98,8 @@ export default function DetailsTab({ ed }) {
               options={opts}
               value={nv}
               onPick={(val) => setSpecField(f.id, val)}
-              onAdd={(raw) => addOption('spec.' + f.id, raw, (s) => normField(f.id, s))}
-              onDelete={(o) => removeOption('spec.' + f.id, o)}
+              makeOption={(s) => normField(f.id, s)}
+              onSave={(list) => replaceOptions('spec.' + f.id, list)}
             />
             <input className={`shrink-0 w-24 rounded-full border-2 px-3 py-1.5 text-sm outline-none focus:border-brand ${v && !picked ? 'border-brand' : 'border-neutral-200'}`} value={picked ? '' : v} onChange={(e) => setSpecField(f.id, e.target.value)} placeholder="Tjetër" aria-label={f.label + ' tjetër'} />
           </div>) })}
@@ -122,10 +122,10 @@ export default function DetailsTab({ ed }) {
         <span className={`w-12 h-7 rounded-full relative transition ${noActive ? 'bg-brand' : 'bg-neutral-300'}`}><span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all ${noActive ? 'left-6' : 'left-1'}`} /></span>
       </button>
       <div><label className="label">Gjendja</label>
-        <OptionChips label="Gjendja" options={optionSets.condition} value={x.condition} onPick={(v) => setX('condition', v)} onAdd={(raw) => addOption('condition', raw)} onDelete={(o) => removeOption('condition', o)} />
+        <OptionChips label="Gjendja" options={optionSets.condition} value={x.condition} onPick={(v) => setX('condition', v)} onSave={(list) => replaceOptions('condition', list)} />
       </div>
       <div><label className="label">Shënime</label>
-        <OptionChips label="Shënimet" options={optionSets.notes} value={notes} multiple icons onPick={(v) => setX('notes', v)} onAdd={(raw) => addOption('notes', raw)} onDelete={(o) => removeOption('notes', o)} />
+        <OptionChips label="Shënimet" options={optionSets.notes} value={notes} multiple icons onPick={(v) => setX('notes', v)} onSave={(list) => replaceOptions('notes', list)} />
       </div>
       </>}
       {has('photo2') && <div><label className="label">Foto e dytë</label>
