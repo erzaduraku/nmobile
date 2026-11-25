@@ -1,4 +1,4 @@
-import THEMES_JSON from './themes.json'
+import THEMES_JSON from './themes.json' with { type: 'json' }
 
 // Temat (konfigurim i ndarë te themes.json): Standard, Stinët, Festat.
 export const THEMES = THEMES_JSON
