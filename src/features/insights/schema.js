@@ -3,7 +3,7 @@
 
 export const PROVIDER = 'groq'
 export const DEFAULT_MODEL = 'qwen/qwen3.8-27b'
-export const PROMPT_VERSION = '1'
+export const PROMPT_VERSION = '2'
 
 export const ENUMS = {
   product_category: ['smartphone', 'iphone', 'samsung', 'accessory', 'other', 'unknown'],
@@ -15,9 +15,14 @@ export const ENUMS = {
   whitespace: ['high', 'medium', 'low', 'unknown'],
   clarity: ['sharp', 'acceptable', 'poor', 'unknown'],
   text_density: ['low', 'medium', 'high', 'unknown'],
+  text_size: ['large', 'medium', 'small', 'unknown'],
+  text_overlap: ['none', 'product', 'unknown'],
+  text_prominence: ['high', 'medium', 'low', 'unknown'],
 }
 
 export const BOOLS = ['product_recognizable', 'multiple_products', 'price_visible', 'old_and_new_price', 'discount_badge', 'cta_visible', 'specs_visible', 'contact_visible', 'overcrowded', 'logo_visible']
+export const TEXTS = ['product_name', 'price', 'old_price', 'currency', 'discount_label', 'cta_text', 'promo_text', 'specs_text', 'contact_text', 'brand_text']
+export const CONFIDENCE = ['confidence_category', 'confidence_price', 'confidence_discount', 'confidence_cta', 'confidence_visibility']
 
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i
 
@@ -25,6 +30,8 @@ export function emptyVision() {
   const o = { dominant_colors: [], product_area_pct: null }
   for (const k of Object.keys(ENUMS)) o[k] = null
   for (const k of BOOLS) o[k] = null
+  for (const k of TEXTS) o[k] = null
+  for (const k of CONFIDENCE) o[k] = null
   return o
 }
 
@@ -46,12 +53,33 @@ function boolOrNull(value) {
   return value === true || value === false ? value : null
 }
 
+function textOrNull(value) {
+  if (value == null) return null
+  const s = String(value).trim()
+  if (!s || s.length > 160) return null
+  return s
+}
+
+function currencyOrNull(value) {
+  const s = textOrNull(value)
+  if (!s || !/^[A-Za-z]{3}$/.test(s)) return null
+  return s.toUpperCase()
+}
+
+function confidenceOrNull(value) {
+  const n = typeof value === 'number' ? value : null
+  if (n == null || !Number.isFinite(n) || n < 0 || n > 1) return null
+  return Math.round(n * 100) / 100
+}
+
 /** Returns a clean feature object, or null when the payload is not an object. */
 export function validateVision(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
   const out = emptyVision()
   for (const k of Object.keys(ENUMS)) out[k] = enumOrNull(k, raw[k])
   for (const k of BOOLS) out[k] = boolOrNull(raw[k])
+  for (const k of TEXTS) out[k] = k === 'currency' ? currencyOrNull(raw[k]) : textOrNull(raw[k])
+  for (const k of CONFIDENCE) out[k] = confidenceOrNull(raw[k])
   const area = raw.product_area_pct
   out.product_area_pct = typeof area === 'number' && Number.isFinite(area) && area >= 0 && area <= 100 ? Math.round(area) : null
   const colors = Array.isArray(raw.dominant_colors) ? raw.dominant_colors : []

@@ -2,7 +2,7 @@
 // Body: { post_id } for an app post, or { media_id, image_url } for an Instagram-only post.
 // The image URL is accepted only from Instagram CDNs. App images are read from the private posts bucket.
 // GROQ_API_KEY is read here and never sent to the browser. A missing key returns { configured: false }.
-import { admin, cors, json, userFrom } from '../_shared/common.ts'
+import { admin, cors, freshToken, GRAPH, json, userFrom } from '../_shared/common.ts'
 import { analyzeWithGroq, DEFAULT_MODEL, PROMPT_VERSION, PROVIDER, sha256, validateVision } from '../_shared/vision.ts'
 
 function ownsPath(userId: string, path: string) {
@@ -71,23 +71,40 @@ Deno.serve(async (req) => {
       imagePath = post.image_path
       postId = post.id
       mediaId = post.ig_media_id || null
-    } else if (body.media_id && body.image_url) {
-      const url = allowedCdn(String(body.image_url))
-      if (!url) return json({ error: 'Adresa e fotos nuk lejohet.' }, 400)
+    } else if (body.media_id) {
+      const mediaIdRaw = String(body.media_id)
+      if (!/^[0-9]+$/.test(mediaIdRaw)) return json({ error: 'Postimi i Instagramit nuk u gjet.' }, 404)
+      const { data: acc } = await db.from('instagram_accounts').select('*').eq('user_id', user.id).maybeSingle()
+      if (!acc?.ig_user_id) return json({ error: 'Instagrami nuk është i lidhur.' }, 400)
+      const token = await freshToken(acc)
+      const owned = await fetch(`${GRAPH}/${mediaIdRaw}?fields=id,media_url,media_type&access_token=${token}`)
+      const ownedBody = await owned.json().catch(() => ({}))
+      if (!owned.ok || String(ownedBody?.id || '') !== mediaIdRaw) return json({ error: 'Postimi i Instagramit nuk u gjet.' }, 404)
+      const url = allowedCdn(String(ownedBody.media_url || ''))
+      if (!url) return json({ error: 'Fotoja e këtij postimi nuk është e arritshme.' }, 404)
       const r = await fetch(url, { redirect: 'manual' })
       if (r.status >= 300 && r.status < 400) return json({ error: 'Fotoja e Instagramit nuk u mor.' }, 400)
       const type = r.headers.get('content-type') || ''
       if (!r.ok || !type.startsWith('image/')) return json({ error: 'Fotoja e Instagramit nuk u mor.' }, 400)
       bytes = await readLimited(r, MAX_BYTES)
       if (!bytes) return json({ error: 'Fotoja është shumë e madhe.' }, 400)
-      mediaId = String(body.media_id).slice(0, 64)
+      mediaId = mediaIdRaw
     } else return json({ error: 'Mungon postimi.' }, 400)
 
     if (!bytes || bytes.byteLength === 0 || bytes.byteLength > MAX_BYTES) return json({ error: 'Fotoja është shumë e madhe ose bosh.' }, 400)
     const hash = await sha256(bytes)
     const model = Deno.env.get('IMAGE_ANALYSIS_MODEL') || DEFAULT_MODEL
+    const link = async (analysisId: string) => {
+      if (!postId && !mediaId) return
+      const row = { user_id: user.id, analysis_id: analysisId, post_id: postId, media_id: mediaId }
+      const conflict = postId ? 'user_id,post_id' : 'user_id,media_id'
+      await db.from('post_image_analysis_links').upsert(row, { onConflict: conflict })
+    }
     const { data: cached } = await db.from('post_image_analyses').select('*').eq('user_id', user.id).eq('image_hash', hash).eq('provider', PROVIDER).eq('model', model).eq('prompt_version', PROMPT_VERSION).maybeSingle()
-    if (cached?.features) return json({ configured: true, cached: true, analysis: cached })
+    if (cached?.features) {
+      await link(cached.id)
+      return json({ configured: true, cached: true, analysis: cached, link: { post_id: postId, media_id: mediaId, analysis_id: cached.id } })
+    }
 
     const apiKey = Deno.env.get('GROQ_API_KEY')
     if (!apiKey) return json({ configured: false, cached: false, analysis: null })
@@ -101,10 +118,14 @@ Deno.serve(async (req) => {
     const inserted = await db.from('post_image_analyses').insert(row).select('*').maybeSingle()
     if (inserted.error) {
       const again = await db.from('post_image_analyses').select('*').eq('user_id', user.id).eq('image_hash', hash).eq('provider', PROVIDER).eq('model', model).eq('prompt_version', PROMPT_VERSION).maybeSingle()
-      if (again.data) return json({ configured: true, cached: true, analysis: again.data })
+      if (again.data) {
+        await link(again.data.id)
+        return json({ configured: true, cached: true, analysis: again.data, link: { post_id: postId, media_id: mediaId, analysis_id: again.data.id } })
+      }
       return json({ configured: true, code: 'failed', error: 'Analiza nuk u ruajt.' }, 500)
     }
-    return json({ configured: true, cached: false, analysis: inserted.data })
+    await link(inserted.data.id)
+    return json({ configured: true, cached: false, analysis: inserted.data, link: { post_id: postId, media_id: mediaId, analysis_id: inserted.data.id } })
   } catch (e) {
     return json({ error: e instanceof Error ? e.message : 'Analiza dështoi.' }, 500)
   }

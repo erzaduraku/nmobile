@@ -1,28 +1,20 @@
 // Rates compared inside one format. A post with more likes is not ahead when its reach is much higher.
-import { engagement, interactions, MIN_AGE_H, MIN_REACH } from '../posts/promote.js'
+import { engagement, interactions, mediaFormat, FORMAT_LABEL, MIN_AGE_H, MIN_REACH } from '../posts/promote.js'
 
-export { engagement, interactions }
+export { engagement, interactions, mediaFormat, FORMAT_LABEL }
 
 export function pct(r) {
   if (r == null || !Number.isFinite(r)) return null
   return (r * 100).toFixed(r < 0.1 ? 1 : 0).replace('.', ',') + '%'
 }
 
-export function mediaFormat(post) {
-  const t = post?.ig_stats?.media_product_type || post?.ig?.media_product_type
-  if (t === 'STORY') return 'story'
-  if (t === 'REELS' || post?.ig?.media_type === 'VIDEO') return 'reel'
-  if (post?.type === 'story') return 'story'
-  return 'feed'
-}
-
-export const FORMAT_LABEL = { feed: 'Postim', reel: 'Reel', story: 'Story' }
-
-/** Saves are not returned for stories, so only shares count there. */
+/** A missing save or share is left out. Stories never treat a missing save as zero. */
 export function saveShareRate(stats, format) {
   if (!stats || !(stats.reach > 0)) return null
-  const saves = format === 'story' ? 0 : (stats.saved || 0)
-  return (saves + (stats.shares || 0)) / stats.reach
+  const shares = typeof stats.shares === 'number' ? stats.shares : null
+  const saves = format === 'story' || typeof stats.saved !== 'number' ? null : stats.saved
+  if (shares == null && saves == null) return null
+  return ((saves || 0) + (shares || 0)) / stats.reach
 }
 
 export function comparable(post, now = Date.now()) {
@@ -36,9 +28,16 @@ export function comparable(post, now = Date.now()) {
 }
 
 export function accountAverage(rows) {
-  const reach = rows.reduce((a, r) => a + (r.stats.reach || 0), 0)
+  let reach = 0
+  let sum = 0
+  for (const r of rows) {
+    const n = interactions(r.stats)
+    if (n == null || !(r.stats?.reach > 0)) continue
+    reach += r.stats.reach
+    sum += n
+  }
   if (!(reach > 0)) return null
-  return rows.reduce((a, r) => a + interactions(r.stats), 0) / reach
+  return sum / reach
 }
 
 /** 0–10 percentile inside the cohort. Null until the cohort has 3 posts. */

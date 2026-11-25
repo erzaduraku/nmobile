@@ -6,7 +6,7 @@ import { validateVision } from './schema.js'
 import { structuredFeatures } from './structured.js'
 import { mergeFeatures } from './merge.js'
 import { mediaFormat, FORMAT_LABEL, comparable, accountAverage, scoreRate, bestAndWeakest, pct, saveShareRate } from './metrics.js'
-import { booleanPatterns, areaPattern, colorPattern, templatePattern, ctaPattern } from './patterns.js'
+import { booleanPatterns, areaPattern, colorPattern, templatePattern, ctaPattern, themePattern, categoryOf } from './patterns.js'
 import { adviceItems } from './recommend.js'
 
 const POSTED_SKIP = new Set(['draft', 'exported', 'scheduled', 'publishing', 'failed'])
@@ -42,6 +42,7 @@ export function buildReport(posts, analyses = [], now = Date.now()) {
     rows.push({ ...base, ...featuresFor(post, analyses) })
   }
   const byFormat = {}
+  const byCategory = {}
   for (const format of ['feed', 'reel', 'story']) {
     const group = rows.filter((r) => r.format === format)
     const avg = accountAverage(group)
@@ -53,12 +54,27 @@ export function buildReport(posts, analyses = [], now = Date.now()) {
       area: areaPattern(group, format),
       colors: colorPattern(group, format),
       template: templatePattern(group, format),
+      theme: themePattern(group, format),
       cta: ctaPattern(group, format),
       best: ranked.best,
       weakest: ranked.weakest,
     }
+    byCategory[format] = {}
+    for (const category of ['iphone', 'samsung', 'smartphone', 'accessory']) {
+      const subset = group.filter((r) => categoryOf(r) === category)
+      byCategory[format][category] = {
+        count: subset.length,
+        avg: accountAverage(subset),
+        patterns: booleanPatterns(subset, format),
+        area: areaPattern(subset, format),
+        colors: colorPattern(subset, format),
+        template: templatePattern(subset, format),
+        theme: themePattern(subset, format),
+        cta: ctaPattern(subset, format),
+      }
+    }
   }
-  const report = { rows, byFormat, now }
+  const report = { rows, byFormat, byCategory, now }
   report.advice = adviceItems(report)
   report.thin = !report.advice.length
   return report
@@ -121,7 +137,13 @@ export function featureLines(features, sources) {
     const name = TEMPLATES.find((t) => t.id === features.template)?.name || features.template
     lines.unshift({ key: 'template', text: `Shablloni: ${name} (nga dizajni)` })
   }
-  if (features.cta_text) lines.push({ key: 'cta_text', text: `Teksti i butonit: ${features.cta_text} (nga dizajni)` })
+  if (features.cta_text) lines.push({ key: 'cta_text', text: `Teksti i butonit: ${features.cta_text}` })
+  if (features.price) {
+    const unsure = typeof features.confidence_price === 'number' && features.confidence_price < 0.6
+    lines.push({ key: 'price_read', text: `Çmimi i lexuar: ${features.price}${unsure ? ' (lexim i pasigurt)' : ''}` })
+  }
+  if (features.old_price) lines.push({ key: 'old_price_read', text: `Çmimi i vjetër i lexuar: ${features.old_price}` })
+  if (features.product_name) lines.push({ key: 'product_name', text: `Emri i lexuar: ${features.product_name}` })
   return lines
 }
 
@@ -190,11 +212,12 @@ export function describePost(post, report, analyses = [], now = Date.now()) {
 export function promotionFor(post, posts, now = Date.now()) {
   const promo = pickPromote((posts || []).filter(isPosted), now)
   const comp = comparable(post, now)
-  if (promo?.id === post.id) return { worth: true, reason: promo.reason, rate: promo.rate, avg: promo.avg }
+  if (promo?.id && promo.id === post.id) return { worth: true, reason: promo.reason, rate: promo.rate, avg: promo.avg, format: promo.format }
   const limits = []
+  if (promo?.insufficient && promo.format === mediaFormat(post)) limits.push(promo.reason)
   if (!comp) limits.push('Nuk plotëson kushtet e krahasimit (të paktën 24 orë dhe arritje 50).')
   else if (comp.ageH > MAX_AGE_D * 24) limits.push('Është më i vjetër se 30 ditë.')
-  else if (promo) limits.push('Një postim tjetër e kalon mesataren më shumë.')
-  else limits.push('Nuk e kalon pragun: 20% mbi mesatare kur ka disa postime, ose 5% kur ka vetëm një.')
+  else if (promo?.id) limits.push('Një postim tjetër i së njëjtës formë e kalon mesataren më shumë.')
+  else if (!promo?.insufficient) limits.push('Nuk e kalon pragun: 20% mbi mesataren e formatit kur ka disa postime, ose 5% kur ka vetëm një.')
   return { worth: false, reason: limits[0], rate: comp?.rate ?? null, avg: promo?.avg ?? null, limits }
 }

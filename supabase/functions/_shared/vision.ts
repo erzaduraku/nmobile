@@ -9,7 +9,7 @@
 
 export const PROVIDER = 'groq'
 export const DEFAULT_MODEL = 'qwen/qwen3.8-27b'
-export const PROMPT_VERSION = '1'
+export const PROMPT_VERSION = '2'
 
 const ENUMS: Record<string, string[]> = {
   product_category: ['smartphone', 'iphone', 'samsung', 'accessory', 'other', 'unknown'],
@@ -21,14 +21,23 @@ const ENUMS: Record<string, string[]> = {
   whitespace: ['high', 'medium', 'low', 'unknown'],
   clarity: ['sharp', 'acceptable', 'poor', 'unknown'],
   text_density: ['low', 'medium', 'high', 'unknown'],
+  text_size: ['large', 'medium', 'small', 'unknown'],
+  text_overlap: ['none', 'product', 'unknown'],
+  text_prominence: ['high', 'medium', 'low', 'unknown'],
 }
 const BOOLS = ['product_recognizable', 'multiple_products', 'price_visible', 'old_and_new_price', 'discount_badge', 'cta_visible', 'specs_visible', 'contact_visible', 'overcrowded', 'logo_visible']
+const TEXTS = ['product_name', 'price', 'old_price', 'currency', 'discount_label', 'cta_text', 'promo_text', 'specs_text', 'contact_text', 'brand_text']
+const CONFIDENCE = ['confidence_category', 'confidence_price', 'confidence_discount', 'confidence_cta', 'confidence_visibility']
 
-const SYSTEM = `You extract visual facts from one promotional image for a phone shop.
-Return only JSON. Use null for anything you cannot see reliably. Do not guess a price, discount, brand or call to action.
+const SYSTEM = `You extract visible text and visual facts from one promotional image for a phone shop.
+Return only JSON. Use null for any text or fact you cannot read. Do not guess a price, discount, brand, phone number or call to action.
+price and old_price are the exact text of the new and old price, or null. currency is a 3-letter code such as EUR only when it is printed, else null.
+discount_label is the printed discount text such as -20%, or null. Do not calculate it.
 product_area_pct is an integer 0-100 or null. dominant_colors is up to 5 hex colors like #RRGGBB, or [].
-Enums: product_category smartphone|iphone|samsung|accessory|other|unknown|null; product_visibility high|medium|low|unknown|null; product_position center|left|right|top|bottom|unknown|null; contrast strong|medium|weak|unknown|null; background_type plain|gradient|shop|lifestyle|photo|unknown|null; composition balanced|product-heavy|text-heavy|unknown|null; whitespace high|medium|low|unknown|null; clarity sharp|acceptable|poor|unknown|null; text_density low|medium|high|unknown|null.
-Booleans are true, false or null: product_recognizable, multiple_products, price_visible, old_and_new_price, discount_badge, cta_visible, specs_visible, contact_visible, overcrowded, logo_visible.`
+Confidence fields are numbers from 0 to 1 or null: confidence_category, confidence_price, confidence_discount, confidence_cta, confidence_visibility.
+Enums: product_category smartphone|iphone|samsung|accessory|other|unknown|null; product_visibility high|medium|low|unknown|null; product_position center|left|right|top|bottom|unknown|null; contrast strong|medium|weak|unknown|null; background_type plain|gradient|shop|lifestyle|photo|unknown|null; composition balanced|product-heavy|text-heavy|unknown|null; whitespace high|medium|low|unknown|null; clarity sharp|acceptable|poor|unknown|null; text_density low|medium|high|unknown|null; text_size large|medium|small|unknown|null; text_overlap none|product|unknown|null; text_prominence high|medium|low|unknown|null.
+Booleans are true, false or null: product_recognizable, multiple_products, price_visible, old_and_new_price, discount_badge, cta_visible, specs_visible, contact_visible, overcrowded, logo_visible.
+Text fields are strings or null: product_name, price, old_price, currency, discount_label, cta_text, promo_text, specs_text, contact_text, brand_text.`
 
 function nullableEnum(values: string[]) {
   return { anyOf: [{ type: 'string', enum: values }, { type: 'null' }] }
@@ -41,6 +50,8 @@ function responseSchema() {
   }
   for (const [key, values] of Object.entries(ENUMS)) properties[key] = nullableEnum(values)
   for (const key of BOOLS) properties[key] = { anyOf: [{ type: 'boolean' }, { type: 'null' }] }
+  for (const key of TEXTS) properties[key] = { anyOf: [{ type: 'string' }, { type: 'null' }] }
+  for (const key of CONFIDENCE) properties[key] = { anyOf: [{ type: 'number' }, { type: 'null' }] }
   return { type: 'object', additionalProperties: false, properties, required: Object.keys(properties) }
 }
 
@@ -82,6 +93,19 @@ export function validateVision(raw: unknown) {
     out[key] = norm && ENUMS[key].includes(norm) ? norm : null
   }
   for (const key of BOOLS) out[key] = src[key] === true || src[key] === false ? src[key] : null
+  for (const key of TEXTS) {
+    if (key === 'currency') {
+      const s = typeof src[key] === 'string' ? src[key].trim() : ''
+      out[key] = /^[A-Za-z]{3}$/.test(s) ? s.toUpperCase() : null
+    } else {
+      const s = typeof src[key] === 'string' ? src[key].trim() : ''
+      out[key] = s && s.length <= 160 ? s : null
+    }
+  }
+  for (const key of CONFIDENCE) {
+    const n = src[key]
+    out[key] = typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 1 ? Math.round(n * 100) / 100 : null
+  }
   const area = src.product_area_pct
   out.product_area_pct = typeof area === 'number' && Number.isFinite(area) && area >= 0 && area <= 100 ? Math.round(area) : null
   const colors = Array.isArray(src.dominant_colors) ? src.dominant_colors : []
@@ -115,7 +139,7 @@ async function complete(apiKey: string, model: string, bytes: Uint8Array, mime: 
   const payload: Record<string, unknown> = {
     model,
     temperature: 0,
-    max_completion_tokens: 800,
+    max_completion_tokens: 1200,
     response_format,
     messages: [
       { role: 'system', content: SYSTEM },

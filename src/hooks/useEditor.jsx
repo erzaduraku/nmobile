@@ -460,7 +460,7 @@ export default function useEditor(user) {
   // so drafts store exactly what the editor shows.
   // Solid/gradient backgrounds (any colour) are removed automatically with the fast flood fill;
   // the Photo step then shows the result with "Hiq sfondin" / "Rikthe origjinalin" (and the AI for busy backgrounds).
-  async function usePhoto(blob, orig) {
+  async function applyPhoto(blob, orig) {
     const im = await blobToImg(blob)
     let io = null; if (orig) { try { io = await blobToImg(orig) } catch {} }
     photoRef.current = { blob, orig: orig || null, dirty: true }; showImgs(im, io)
@@ -473,7 +473,7 @@ export default function useEditor(user) {
       setBg({ removed: false, smooth: false, busy: 'flood', progress: 0 })
       let cut = null, a = { smooth: false, alpha: false }
       try { a = await canFlood(b); if (a.smooth) cut = await floodRemove(b) } catch (err) { console.error(err) }
-      await usePhoto(cut || b, cut ? b : null)
+      await applyPhoto(cut || b, cut ? b : null)
       setPublished(null); setIgLink('')
       setBg({ removed: Boolean(cut) || a.alpha, smooth: a.smooth, busy: '', progress: 0 })
       setTab('foto'); setPhotoMissing(false)
@@ -483,14 +483,14 @@ export default function useEditor(user) {
   // on = remove the background (fast flood fill, or the AI for busy backgrounds / when ai = true); off = original
   async function setBgRemoved(on, ai = false) {
     const cur = photoRef.current; if (!cur.blob || bg.busy) return
-    if (!on) { if (cur.orig) { await usePhoto(cur.orig, null); setBg((s) => ({ ...s, removed: false })) } return }
+    if (!on) { if (cur.orig) { await applyPhoto(cur.orig, null); setBg((s) => ({ ...s, removed: false })) } return }
     const src = cur.orig || cur.blob
     setBg((s) => ({ ...s, busy: ai ? 'ai' : 'flood', progress: 0 }))
     try {
       let out = null
       if (!ai) out = await floodRemove(src, { force: true })
       if (!out) { ai = true; setBg((s) => ({ ...s, busy: 'ai' })); out = await aiRemove(src, (v) => setBg((s) => ({ ...s, progress: v }))) }
-      await usePhoto(out, src); setBg((s) => ({ ...s, removed: true, busy: '' }))
+      await applyPhoto(out, src); setBg((s) => ({ ...s, removed: true, busy: '' }))
       say(ai ? 'Sfondi u hoq (AI)' : 'Sfondi u hoq')
     } catch (err) { console.error(err); setBg((s) => ({ ...s, busy: '' })); say('Heqja e sfondit dështoi – provo përsëri') }
   }

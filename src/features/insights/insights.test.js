@@ -5,8 +5,12 @@ import { structuredFeatures, categoryFromName } from './structured.js'
 import { mergeFeatures } from './merge.js'
 import { engagement, saveShareRate, mediaFormat, scoreRate, comparable } from './metrics.js'
 import { buildReport, describePost, promotionFor } from './report.js'
-import { designAdvice } from './recommend.js'
+import { designAdvice, advicePatch, withoutIgnored } from './recommend.js'
 import { pickPromote } from '../posts/promote.js'
+import { discountFromPrices } from './discount.js'
+import { ownedMediaUrl } from '../instagram/mediaAccess.js'
+import { analysisLink, keepsSeparatePosts } from './analysisLink.js'
+import { recommendationRows } from './snapshots.js'
 
 const NOW = Date.parse('2026-06-15T00:00:00Z')
 const AT = '2026-05-20T00:00:00Z'
@@ -219,7 +223,7 @@ test('the same image hash, provider, model and prompt is a cache hit', () => {
   assert.equal(cacheHit([row], key), row)
   assert.equal(cacheHit([row], { ...key, hash: 'other' }), null)
   assert.equal(cacheHit([row], { ...key, model: 'other' }), null)
-  assert.equal(cacheHit([{ ...row, prompt_version: '2' }], key), null)
+  assert.equal(cacheHit([{ ...row, prompt_version: '9' }], key), null)
 })
 
 test('pickPromote still requires a lift over the account average', () => {
@@ -243,4 +247,102 @@ test('promotion follows pickPromote and explains when a post is not chosen', () 
   const other = promotionFor(posts[1], posts, NOW)
   assert.equal(other.worth, false)
   assert.ok(other.reason)
+})
+
+test('feed, reel and story are compared only with their own format', () => {
+  const feed = [
+    row('feed-high', { interactions: 200, format: 'FEED' }),
+    row('feed-low', { interactions: 40, format: 'FEED' }),
+  ]
+  const reel = row('reel', { interactions: 40, format: 'REELS' })
+  const picked = pickPromote([...feed, reel], NOW)
+  assert.equal(picked.id, 'feed-high')
+  assert.equal(picked.format, 'feed')
+  const onlyReel = pickPromote([reel], NOW)
+  assert.equal(onlyReel.insufficient, true)
+  assert.equal(onlyReel.format, 'reel')
+  assert.equal(onlyReel.id, null)
+})
+
+test('a missing metric is not a zero and a real zero still counts', () => {
+  const missing = { reach: 1000, likes: null, comments: null, saved: null, shares: null }
+  assert.equal(engagement(missing), null)
+  const zeros = { reach: 1000, likes: 0, comments: 0, saved: 0, shares: 0 }
+  assert.equal(engagement(zeros), 0)
+  const partial = { reach: 1000, likes: null, comments: 2, shares: 3 }
+  assert.equal(engagement(partial), 0.005)
+  const story = { reach: 500, media_product_type: 'STORY', likes: null, saved: null, shares: 10 }
+  assert.equal(engagement(story), 0.02)
+  assert.equal(saveShareRate(story, 'story'), 0.02)
+})
+
+test('extracted text, confidence and calculated discounts stay honest', () => {
+  const clean = validateVision({
+    product_name: 'iPhone 15 Pro',
+    price: '799€',
+    old_price: '999€',
+    currency: 'eur',
+    cta_text: 'Bli Tani',
+    discount_label: '-20%',
+    confidence_price: 0.92,
+    confidence_cta: 1.4,
+    promo_text: 'x'.repeat(200),
+  })
+  assert.equal(clean.product_name, 'iPhone 15 Pro')
+  assert.equal(clean.currency, 'EUR')
+  assert.equal(clean.cta_text, 'Bli Tani')
+  assert.equal(clean.confidence_price, 0.92)
+  assert.equal(clean.confidence_cta, null)
+  assert.equal(clean.promo_text, null)
+  const ok = discountFromPrices('999', '799', '-20%')
+  assert.equal(ok.shown, true)
+  assert.equal(ok.source, 'calculated')
+  assert.equal(Math.round(ok.discount), 20)
+  assert.equal(discountFromPrices('0', '10').shown, false)
+  assert.equal(discountFromPrices('100', '80', '-5%').shown, false)
+})
+
+test('a category with too little data falls back and says so', () => {
+  const posts = []
+  for (let i = 0; i < 3; i++) posts.push(row('p' + i, { model: 'iPhone 13', price: '100', cta: 'Na kontakto', interactions: 200 }))
+  for (let i = 0; i < 3; i++) posts.push(row('q' + i, { model: 'iPhone 13', price: '', cta: '', interactions: 40 }))
+  const report = buildReport(posts, [], NOW)
+  const samsung = designAdvice({ model: 'Galaxy S24', template: 'hero', price: '', offer: '', cta: '' }, report)
+  assert.equal(samsung.scope, 'format')
+  assert.match(samsung.note, /këtij formati/)
+  const iphone = designAdvice({ model: 'iPhone 13', template: 'hero', price: '100', offer: '', cta: 'Na kontakto' }, report)
+  assert.equal(iphone.scope, 'category')
+})
+
+test('apply and ignore change only the recommended field', () => {
+  const item = { id: 'theme', format: 'feed', apply: { theme: 'dimer' } }
+  assert.deepEqual(advicePatch(item), { theme: 'dimer' })
+  assert.equal(advicePatch({ id: 'area', format: 'feed', apply: null }), null)
+  const left = withoutIgnored([item, { id: 'cta', format: 'feed' }], new Set(['theme:feed']))
+  assert.equal(left.length, 1)
+  assert.equal(left[0].id, 'cta')
+})
+
+test('instagram media is accepted only from the connected account response', () => {
+  const account = { ig_user_id: '1789' }
+  const ok = ownedMediaUrl(account, { id: '1789', media_url: 'https://scontent.cdninstagram.com/v/photo.jpg' })
+  assert.equal(ok.ok, true)
+  assert.equal(ownedMediaUrl(account, { id: '1789', media_url: 'https://evil.example/a.jpg' }).ok, false)
+  assert.equal(ownedMediaUrl(null, { id: '1789', media_url: 'https://scontent.cdninstagram.com/v/a.jpg' }).status, 400)
+  assert.equal(ownedMediaUrl(account, { id: 'nope' }).status, 404)
+})
+
+test('a cached analysis keeps a separate link for each post', () => {
+  const link = analysisLink('user-a', 'analysis-1', { postId: 'post-b', mediaId: null })
+  assert.equal(link.post_id, 'post-b')
+  assert.equal(link.analysis_id, 'analysis-1')
+  assert.equal(keepsSeparatePosts('post-a', 'post-b'), true)
+  assert.equal(analysisLink('user-a', 'analysis-1', {}), null)
+  const rows = recommendationRows('user-a', 'post-b', [{ id: 'theme', format: 'feed', scope: 'format', apply: { theme: 'dimer' }, reason: 'seen', sampleSize: 6 }])
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0].user_id, 'user-a')
+  assert.equal(rows[0].theme_id, 'dimer')
+  assert.equal(rows[0].algorithm_version, '2')
+  const again = recommendationRows('user-a', 'post-b', [{ id: 'theme', format: 'feed', scope: 'format', apply: { theme: 'dimer' }, reason: 'seen', sampleSize: 6 }])
+  assert.equal(again[0].dedupe_key, rows[0].dedupe_key)
 })

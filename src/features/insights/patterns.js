@@ -1,6 +1,7 @@
 // Observed gaps only. A pattern is reported when each side has 3 posts and the rates differ by at least 15%.
 import { accountAverage, pct, FORMAT_LABEL } from './metrics.js'
 import { interactions } from '../posts/promote.js'
+import { THEMES } from '../themes/themes.js'
 
 export const MIN_SIDE = 3
 export const MIN_GAP = 0.15
@@ -21,9 +22,16 @@ const BOOLS = [
 ]
 
 function weighted(rows) {
-  const reach = rows.reduce((a, r) => a + (r.stats.reach || 0), 0)
+  let reach = 0
+  let sum = 0
+  for (const r of rows) {
+    const n = interactions(r.stats)
+    if (n == null || !(r.stats?.reach > 0)) continue
+    reach += r.stats.reach
+    sum += n
+  }
   if (!(reach > 0)) return null
-  return rows.reduce((a, r) => a + interactions(r.stats), 0) / reach
+  return sum / reach
 }
 
 function sentence(label, format, yes, no, rateYes, rateNo) {
@@ -124,6 +132,42 @@ export function templatePattern(rows, format) {
     if (gap >= MIN_GAP && (!best || gap > best.gap)) best = { id, n, gap, above: above.length, below: below.length }
   }
   return best ? { ...best, format } : null
+}
+
+const THEME_IDS = new Set(THEMES.map((t) => t.id))
+
+export function categoryOf(row) {
+  const c = row?.features?.product_category
+  if (c === 'iphone' || c === 'samsung' || c === 'smartphone' || c === 'accessory') return c
+  return null
+}
+
+export function themePattern(rows, format) {
+  const avg = accountAverage(rows)
+  if (avg == null) return null
+  const themed = (r) => r.features?.theme && THEME_IDS.has(r.features.theme)
+  const above = rows.filter((r) => themed(r) && r.rate >= avg)
+  const below = rows.filter((r) => themed(r) && r.rate < avg)
+  if (above.length < MIN_SIDE || below.length < MIN_SIDE) return null
+  let best = null
+  for (const id of new Set(above.map((r) => r.features.theme))) {
+    const yes = above.filter((r) => r.features.theme === id)
+    if (yes.length < 2) continue
+    const gap = yes.length / above.length - below.filter((r) => r.features.theme === id).length / below.length
+    if (gap >= MIN_GAP && (!best || gap > best.gap)) {
+      const others = rows.filter((r) => themed(r) && r.features.theme !== id)
+      best = { id, n: yes.length, gap, above: above.length, below: below.length, rateYes: accountAverage(yes), rateNo: accountAverage(others) }
+    }
+  }
+  if (!best || best.rateYes == null || best.rateNo == null) return null
+  const name = THEMES.find((t) => t.id === best.id)?.name || best.id
+  const where = FORMAT_LABEL[format] || format
+  return {
+    ...best,
+    format,
+    name,
+    sentence: `Te ${where}, tema «${name}» u pa te ${best.n} nga ${best.above} postime mbi mesatare. Angazhimi i tyre ishte ${pct(best.rateYes)} kundrejt ${pct(best.rateNo)} te postimet me temë tjetër. Ky është një model i vërejtur, jo provë që tema e shkaktoi rezultatin.`,
+  }
 }
 
 export function ctaPattern(rows, format) {

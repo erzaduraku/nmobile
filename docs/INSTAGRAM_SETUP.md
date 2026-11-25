@@ -93,3 +93,22 @@ Supabase → **Integrations → Cron** → job i ri → *HTTP request* `POST htt
 - Raporti i fotos për Feed: nga 4:5 deri 1.91:1 → Post 1080×1350 (4:5) është në rregull.
 - **Stories** mbështeten (1080×1920); caption-i nuk shfaqet te Story.
 - Llogaritë personale (jo profesionale) nuk mund të lidhen.
+
+## 11. Analiza e fotos (Groq) dhe pronësia e medias
+
+Sekretet e mëposhtme vendosen vetëm te Supabase, jo te Vercel:
+
+```bash
+supabase secrets set GROQ_API_KEY=gsk_...
+# opsionale, nëse Groq e riemërton modelin falas:
+supabase secrets set IMAGE_ANALYSIS_MODEL=qwen/qwen3.8-27b
+supabase functions deploy analyze-post-image
+```
+
+`GROQ_API_KEY` merret te https://console.groq.com/keys. Plani falas mjafton për provë (rreth 30 kërkesa në minutë, 1000 në ditë; një foto numërohet afër 2048 tokenësh hyrje). Nëse llogaria del nga plani falas, Groq liston rreth $0.80 për 1M tokenë hyrje dhe $4 për 1M tokenë dalje. Aplikacioni nuk e ndërron planin vetë.
+
+Ekzekuto migrimet `016` deri `019` para se ta përdorësh analizën. `016` ruan tiparet e fotos. `018` ruan lidhjen e asaj analize me postimin. `017` nuk lejon që një postim të tregojë një skedar jashtë folderit të pronarit. `019` ruan rekomandimet e shfaqura.
+
+Kur analizohet një postim i Instagramit, funksioni e kërkon atë `media_id` me tokenin e llogarisë së lidhur të përdoruesit. URL-ja që dërgon shfletuesi nuk përdoret. Nëse Instagrami nuk e kthen atë media, kërkesa refuzohet me 404 dhe tokeni nuk i kthehet shfletuesit.
+
+Testet (`npm test`) nuk thërrasin Groq-un dhe nuk publikojnë në Instagram. Lidhja e gjallë duhet provuar me dore pasi sekretet të jenë vendosur.
