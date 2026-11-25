@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase.js'
+import { oauthStateOk } from './oauthState.js'
 export const IG_APP_ID = import.meta.env.VITE_INSTAGRAM_APP_ID
 export const IG_REDIRECT = import.meta.env.VITE_INSTAGRAM_REDIRECT_URI || (typeof location !== 'undefined' ? location.origin + '/' : '')
 export const igReady = Boolean(IG_APP_ID)
@@ -54,9 +55,9 @@ export async function finishInstagramLogin() {
     throw new Error(friendlyError({ error: `${err} ${reason} ${desc}` }, 400))
   }
   const saved = localStorage.getItem('nm_ig_state') || sessionStorage.getItem('nm_ig_state')
-  // Instagram can append '#_' to the redirect; compare without it. Only reject a real mismatch
-  // (a missing saved state, e.g. login finished in another tab, is allowed: the exchange still needs the user's session).
-  if (saved && (state || '').replace(/#_$/, '') !== saved) throw new Error('Lidhja e Instagramit u anulua (state i pavlefshëm). Provo sërish.')
+  // Instagram can append '#_' to the redirect. A missing saved state is a mismatch:
+  // exchanging the code anyway would attach someone else's Instagram account.
+  if (!oauthStateOk(saved, state)) throw new Error('Lidhja e Instagramit u anulua (state i pavlefshëm). Provo sërish.')
   localStorage.removeItem('nm_ig_state'); sessionStorage.removeItem('nm_ig_state') // a code can be exchanged only once (also protects against a double call)
   return invokeFn('instagram-oauth', { code })
 }

@@ -9,7 +9,7 @@
     "preview": "vite preview --host",
     "icons": "node scripts/icons.mjs",
     "render-test": "node scripts/render.mjs",
-    "test": "node --test src/features/insights/insights.test.js"
+    "test": "node --test src/features/insights/insights.test.js src/features/posts/guards.test.js"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.3.0",

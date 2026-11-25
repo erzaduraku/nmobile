@@ -5,6 +5,35 @@
 import { admin, cors, json, userFrom } from '../_shared/common.ts'
 import { analyzeWithGroq, DEFAULT_MODEL, PROMPT_VERSION, PROVIDER, sha256, validateVision } from '../_shared/vision.ts'
 
+function ownsPath(userId: string, path: string) {
+  if (!userId || !path || path.includes('..') || path.includes('\\')) return false
+  const folder = path.split('/')[0]
+  return folder === userId && path.length > folder.length + 1
+}
+
+async function readLimited(res: Response, max: number) {
+  const len = Number(res.headers.get('content-length') || 0)
+  if (len > max) return null
+  if (!res.body) {
+    const buf = new Uint8Array(await res.arrayBuffer())
+    return buf.byteLength > max ? null : buf
+  }
+  const reader = res.body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    total += value.byteLength
+    if (total > max) { await reader.cancel(); return null }
+    chunks.push(value)
+  }
+  const out = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) { out.set(chunk, offset); offset += chunk.byteLength }
+  return out
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const MAX_BYTES = 8_000_000
 
@@ -35,6 +64,7 @@ Deno.serve(async (req) => {
       const { data: post, error } = await db.from('posts').select('id,user_id,image_path,ig_media_id').eq('id', body.post_id).maybeSingle()
       if (error || !post || post.user_id !== user.id) return json({ error: 'Postimi nuk u gjet.' }, 404)
       if (!post.image_path) return json({ error: 'Ky postim nuk ka foto të ruajtur.' }, 400)
+      if (!ownsPath(user.id, post.image_path)) return json({ error: 'Fotoja nuk i përket këtij postimi.' }, 400)
       const file = await db.storage.from('posts').download(post.image_path)
       if (file.error || !file.data) return json({ error: 'Fotoja nuk u lexua.' }, 400)
       bytes = new Uint8Array(await file.data.arrayBuffer())
@@ -48,7 +78,8 @@ Deno.serve(async (req) => {
       if (r.status >= 300 && r.status < 400) return json({ error: 'Fotoja e Instagramit nuk u mor.' }, 400)
       const type = r.headers.get('content-type') || ''
       if (!r.ok || !type.startsWith('image/')) return json({ error: 'Fotoja e Instagramit nuk u mor.' }, 400)
-      bytes = new Uint8Array(await r.arrayBuffer())
+      bytes = await readLimited(r, MAX_BYTES)
+      if (!bytes) return json({ error: 'Fotoja është shumë e madhe.' }, 400)
       mediaId = String(body.media_id).slice(0, 64)
     } else return json({ error: 'Mungon postimi.' }, 400)
 

@@ -9,7 +9,7 @@ export class PublishError extends Error {
 // Publishes JPEG bytes to an Instagram account as a feed post or story. Returns the media id and permalink.
 export async function publishImage(igUserId: string, token: string, ownerId: string, bytes: Uint8Array, caption = '', type = 'post') {
   const db = admin()
-  const path = `${ownerId}/${Date.now()}.jpg`
+  const path = `${ownerId}/${crypto.randomUUID()}.jpg`
   let uploaded = false
   try {
     // 1) upload JPEG to the public temp bucket (Instagram fetches it by URL)
@@ -23,13 +23,15 @@ export async function publishImage(igUserId: string, token: string, ownerId: str
     const r1 = await fetch(`${GRAPH}/${igUserId}/media`, { method: 'POST', body: p })
     const c = await r1.json()
     if (!r1.ok || !c.id) throw new PublishError(c.error?.message || 'Container failed', 400, c)
-    // 3) wait until the container is ready (max ~40 s)
+    // 3) wait until the container is ready (max ~40 s). Do not publish a container that never finished.
+    let ready = false
     for (let i = 0; i < 20; i++) {
       const st = await (await fetch(`${GRAPH}/${c.id}?fields=status_code&access_token=${token}`)).json()
-      if (st.status_code === 'FINISHED') break
+      if (st.status_code === 'FINISHED') { ready = true; break }
       if (st.status_code === 'ERROR' || st.status_code === 'EXPIRED') throw new PublishError('Instagram could not process the image', 400, st)
       await new Promise((r) => setTimeout(r, 2000))
     }
+    if (!ready) throw new PublishError('Instagram could not process the image', 400)
     // 4) publish
     const r2 = await fetch(`${GRAPH}/${igUserId}/media_publish`, { method: 'POST', body: new URLSearchParams({ creation_id: c.id, access_token: token }) })
     const pub = await r2.json()
