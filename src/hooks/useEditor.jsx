@@ -15,7 +15,7 @@ import { idbPut, idbGet, idbDel, idbKeys, photoKey, blobToImg, blobToDataURL, da
 import { TABS } from '../app/tabs.js'
 import { EMPTY_X, EMPTY_CONTACT } from '../features/editor/fields.js'
 import { EMPTY_SPECS, composeSpec, parseSpec, normField, SPEC_FIELDS } from '../features/editor/specFields.js'
-import { loadOptionSets, saveOptionSets, addToOptions, removeFromOptions } from '../features/editor/options.js'
+import { loadOptionSets, saveOptionSets, cleanOptions } from '../features/editor/options.js'
 import { analyzePostImage, listAnalyses } from '../features/insights/api.js'
 
 // All editor state + actions. Returned object `ed` is passed to every tab component.
@@ -82,14 +82,12 @@ export default function useEditor(user) {
     colors: (x.colors || []).map((c) => c.name),
     ...Object.fromEntries(SPEC_FIELDS.map((f) => ['spec.' + f.id, normField(f.id, specF[f.id] || '')])),
   }))
-  const addOption = (key, raw, makeOption) => {
-    const result = addToOptions(optionSets, key, raw, makeOption)
-    if (result.ok) { setOptionSets(result.sets); saveOptionSets(result.sets) }
-    return result
-  }
-  const removeOption = (key, raw) => {
-    const sets = removeFromOptions(optionSets, key, raw)
-    setOptionSets(sets); saveOptionSets(sets)
+  const replaceOptions = (key, list) => {
+    setOptionSets((current) => {
+      const sets = { ...current, [key]: cleanOptions(list) }
+      saveOptionSets(sets)
+      return sets
+    })
   }
   const [settings, setSettings] = useState(false)
   const [toast, setToast] = useState('')
@@ -535,5 +533,5 @@ export default function useEditor(user) {
   const next = TABS[idx + 1]
   const preview = img && !['foto', 'template'].includes(tab)
 
-  return { analyses, runAnalysis, schedulePost, reschedule, unschedule, capOpts, setCapOpts, optionSets, addOption, removeOption, published, stats, refreshStats, statsNeedReconnect, postsView, igFeed, refreshInstagram, bg, setBgRemoved, photoBlob: () => photoRef.current, photoMissing, opening, igUrlFor, x, setX, setXAll, img2, contact, setContact, specF, setSpecField, code, setCode, region, setRegion, noActive, setNoActive, draftId, draftState, saveDraft, newPost, caption, captionEdited, copyCaption, cta, data, download, fileName, idx, ig, igBusy, igLink, img, info, localPosts, logoImg, logoUrl, makeBlob, model, next, offer, onPhoto, posts, postsBusy, preview, price, publishDirect, ready, refreshPosts, remember, removePost, reuse, saveT, say, setCaption, setCaptionEdited, setCta, setIg, setIgBusy, setIgLink, setImg, setInfo, setLogoImg, setLogoUrl, setModel, setOffer, setPosts, setPostsBusy, setPrice, setReady, setSettings, setSpec, setSynced, setTab, setTheme, setToast, setTpl, setType, setVariant, settings, share, spec, synced, tab, th, theme, toast, tpl, type, user, variant }
+  return { analyses, runAnalysis, schedulePost, reschedule, unschedule, capOpts, setCapOpts, optionSets, replaceOptions, published, stats, refreshStats, statsNeedReconnect, postsView, igFeed, refreshInstagram, bg, setBgRemoved, photoBlob: () => photoRef.current, photoMissing, opening, igUrlFor, x, setX, setXAll, img2, contact, setContact, specF, setSpecField, code, setCode, region, setRegion, noActive, setNoActive, draftId, draftState, saveDraft, newPost, caption, captionEdited, copyCaption, cta, data, download, fileName, idx, ig, igBusy, igLink, img, info, localPosts, logoImg, logoUrl, makeBlob, model, next, offer, onPhoto, posts, postsBusy, preview, price, publishDirect, ready, refreshPosts, remember, removePost, reuse, saveT, say, setCaption, setCaptionEdited, setCta, setIg, setIgBusy, setIgLink, setImg, setInfo, setLogoImg, setLogoUrl, setModel, setOffer, setPosts, setPostsBusy, setPrice, setReady, setSettings, setSpec, setSynced, setTab, setTheme, setToast, setTpl, setType, setVariant, settings, share, spec, synced, tab, th, theme, toast, tpl, type, user, variant }
 }
