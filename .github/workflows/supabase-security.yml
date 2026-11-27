@@ -1,0 +1,41 @@
+
+name: Supabase Security
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "supabase/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  database-security:
+    name: Supabase Database Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Supabase CLI
+        run: npm install -g supabase
+
+      - name: Start local Supabase
+        run: supabase start
+
+      - name: Database schema lint
+        run: supabase db lint --fail-on error
+
+      - name: Security advisors
+        run: supabase db advisors --type security --fail-on error
+
+      - name: Database tests
+        run: supabase test db
